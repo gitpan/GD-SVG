@@ -1,5 +1,9 @@
 Revision history for Perl extension GD::SVG.
 
+0.20  Wed Nov 26 08:51:13 2003
+	- fixed a bug in the resetting of line thickness 
+          after using gdBrushed
+
 0.19  Mon Nov 24 10:08:06 2003	
         - support for GD's setBrush and gdBrushed methods
 	- added optional debug parameter to new()	

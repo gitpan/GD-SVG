@@ -4,15 +4,15 @@ use strict;
 use Carp 'croak','carp';
 use GD;
 use SVG;
-use warnings;
+#use warnings;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = sprintf "0.%d%d", q$Revision: 1.9 $ =~ /(\d+)/g;
-#$VERSION = sprintf "0.%02d", q$Revision: 1.9 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%d%d", q$Revision: 1.20 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%02d", q$Revision: 1.20 $ =~ /(\d+)/g;
+$VERSION = sprintf "0.%d", q$Revision: 1.20 $ =~ /\d\.(\d+)/g;
 
 @ISA = qw(Exporter);
-
 %EXPORT_TAGS = ('cmp'  => [qw(GD_CMP_IMAGE 
 			      GD_CMP_NUM_COLORS
 			      GD_CMP_COLOR
@@ -274,8 +274,6 @@ sub GD::SVG::Image::setStyle {
 sub GD::SVG::Image::setThickness {
   my ($self,$thickness) = @_;
   $self->{line_thickness} = $thickness;
-  # Store this until later as well.
-  $self->{prev_line_thickness} = $thickness;
 }
 
 
@@ -605,6 +603,8 @@ sub GD::SVG::Image::arc {
 }
 
 sub GD::SVG::Image::filledArc    { shift->_error('filledArc'); }
+
+# Flood fill that stops at first pixel of a different color.
 sub GD::SVG::Image::fill         { shift->_error('fill'); }
 sub GD::SVG::Image::fillToBorder { shift->_error('fillToBorder'); }
 
@@ -750,6 +750,7 @@ sub GD::SVG::Image::_create_id {
 # setting the line thickness and returning the foreground color
 sub GD::SVG::Image::_distill_gdBrushed {
   my ($self,$type) = @_;
+  # Save the previous line thickness so I can restore after drawing...
   $self->{prev_line_thickness} = $self->_get_thickness();
   my $thickness = $self->{$type}->{thickness};
   my $fg = $self->{$type}->{fg};
@@ -967,7 +968,7 @@ sub DESTROY { }
 
 =pod
 
-=head1 GD::SVG
+=head1 NAME
 
 GD::SVG - Seamlessly enable SVG output from scripts written using GD
 
@@ -1000,15 +1001,15 @@ methods.
 In order to generate SVG output from your script using GD::SVG, you
 will need to first
 
-     # use GD;
-     use GD::SVG;
+  # use GD;
+  use GD::SVG;
 
 After that, each call to the package classes that GD implements should
 be changed to GD::SVG. Thus:
 
-    GD::Image    becomes  GD::SVG::Image
-    GD::Font     becomes  GD::SVG::Font
-    GD::Polygon  becomes  GD::SVG::Polygon
+  GD::Image    becomes  GD::SVG::Image
+  GD::Font     becomes  GD::SVG::Font
+  GD::Polygon  becomes  GD::SVG::Polygon
 
 =head1 DYNAMICALLY SELECTING SVG OUTPUT
 
@@ -1114,7 +1115,7 @@ rather humorous kludge (and simplification). Depending on the
 complexity of the brush, they may behave from slightly differently to
 radically differently from their behavior under GD. You have been
 warned. See the documentation sections for the methods that set these
-options (setStyle, setBrushed, and setTransparent).
+options (setStyle(), setBrush(), and setTransparent()).
 
 =back
 
@@ -1163,29 +1164,29 @@ warning to STDERR.
     $wbmpdata = $image->wbmp([$foreground])
 
   Color control methods:
-    $image->colorAllocateAlpha
-    $image->colorClosest
-    $image->colorClosestHWB
-    $image->colorExact
-    $image->colorResolve
-    $image->getPixel
-    $image->transparent
+    $image->colorAllocateAlpha()
+    $image->colorClosest()
+    $image->colorClosestHWB()
+    $image->colorExact()
+    $image->colorResolve()
+    $image->getPixel()
+    $image->transparent()
 
   Special Colors:
-    $image->setBrush (supported, with kludge)
-    $image->setStyle
+    $image->setBrush() (supported, with kludge)
+    $image->setStyle()
     gdTiled
     gdStyled
-    $image->setAntialiased
-    gdAntiAliased
-    $image->setAntiAliasedDontBlend
+    $image->setAntialiased()
+    gdAntiAliased()
+    $image->setAntiAliasedDontBlend()
 
   Drawing methods:
-    $image->arc
-    $image->dashedLine
-    $image->filledArc
-    $image->fill
-    $image->fillToBorder
+    $image->arc()
+    $image->filledArc()
+    $image->dashedLine()
+    $image->fill()
+    $image->fillToBorder()
 
   Image copying methods
     None of the image copying methods are yet supported
@@ -1194,33 +1195,33 @@ warning to STDERR.
     None of the image transformation methods are yet supported
 
   Character and string drawing methods
-     $image->stringUp  - incompletely supported - broken
-     $image->charUP
-     $image->stringFT
+     $image->stringUp()  - incompletely supported - broken
+     $image->charUp()
+     $image->stringFT()
 
   Alpha Channels
-    $image->alphaBlending
-    $image->saveAlpha
+    $image->alphaBlending()
+    $image->saveAlpha()
 
   Miscellaneous image methods
-    $image->isTrueColor
+    $image->isTrueColor()
     $image->compare($image2)
-    $image->clip
-    $image->boundsSafe
+    $image->clip()
+    $image->boundsSafe()
 
   Polygon methods:
     $polygon->toPt(x,y)
-    $polygon->bounds
-    $polygon->map
-    $polygon->scale
-    $polygon->trasnform
+    $polygon->bounds()
+    $polygon->map()
+    $polygon->scale()
+    $polygon->transform()
 
   GD::Polyline
     Currently no support for GD::Polyline
 
   Font methods:
-    $font->nchars
-    $font->offset
+    $font->nchars()
+    $font->offset()
 
 =head1 GD VERSUS GD::SVG METHODS
 
@@ -1268,7 +1269,7 @@ GD::SVG implements a single output method, svg()!
 This returns the image in SVG format. You may then print it, pipe it
 to an image viewer, or write it to a file handle. For example,
 
-  $svg_data = $image->svg;
+  $svg_data = $image->svg();
   open (DISPLAY,"| display -") || die;
   binmode DISPLAY;
   print DISPLAY $svg_data;
@@ -1308,7 +1309,7 @@ methods.
 
   returns: "rgb(RED,GREEN,BLUE)"
 
-=item $index = $image->colorAllocateAlpha
+=item $index = $image->colorAllocateAlpha()
 
 NOT IMPLEMENTED
 
@@ -1372,7 +1373,7 @@ loaded. GD::SVG offers limited support for these methods.
 
 =over 4
 
-=item $image->setBrush($image) (KLUDGE ALERT)
+=item $image->setBrush($brush) (KLUDGE ALERT)
 =item gdBrushed
 
 In GD, one can draw lines and shapes using a brush pattern.  Brushes
@@ -1500,7 +1501,7 @@ the special colors is also permitted. See the documentation for the
 line() method for additional details.
 
   # make a polygon
-  $poly = new GD::Polygon;
+  $poly = new GD::SVG::Polygon;
   $poly->addPt(50,0);
   $poly->addPt(99,99);
   $poly->addPt(0,99);
@@ -1788,13 +1789,11 @@ coordinates.  If this is the first point, act like addPt().
 
 NOT IMPLEMENTED
 
-=item $vertex_count = $poly->length
+=item $vertex_count = $poly->length()
 
 Return the number of vertices in the polygon.
 
-  $points = $poly->length;
-
-=item @vertices = $poly->vertices
+=item @vertices = $poly->vertices()
 
 Return a list of all the verticies in the polygon object.  Each mem-
 ber of the list is a reference to an (x,y) array.
@@ -1804,7 +1803,7 @@ ber of the list is a reference to an (x,y) array.
       print join(",",@$v),"\n";
   }
 
-=item @rect = $poly->bounds
+=item @rect = $poly->bounds()
 
 Return the smallest rectangle that completely encloses the polygon.
 The return value is an array containing the (left,top,right,bottom) of
@@ -1845,7 +1844,7 @@ large.  For best results, move the center of the polygon to position
 
 NOT IMPLEMENTED
 
-=item $poly->transform($sx,$rx,$sy,$ry,$tx,$ty) 
+=item $poly->transform($sx,$rx,$sy,$ry,$tx,$ty)
 
 Run each vertex of the polygon through a transformation matrix, where
 sx and sy are the X and Y scaling factors, rx and ry are the X and Y
@@ -1878,30 +1877,35 @@ as a package method (e.g. GD::Font->Small).
 
 =over 4
 
-=item gdSmallFont 
+=item gdTinyFont
+
+=item GD::Font->Tiny
+
+This is a tiny, almost unreadable font, 5x8 pixels wide.
+
+=item gdSmallFont
+
 =item GD::Font->Small
 
 This is the basic small font, "borrowed" from a well known public
 domain 6x12 font.
 
-=item gdLargeFont
-=item GD::Font->Large
-
-This is the basic large font, "borrowed" from a well known public
-domain 8x16 font.
-
 =item gdMediumBoldFont
+
 =item GD::Font->MediumBold
 
 This is a bold font intermediate in size between the small and large
 fonts, borrowed from a public domain 7x13 font;
 
-=item gdTinyFont
-=item GD::Font->Tiny
+=item gdLargeFont
 
-This is a tiny, almost unreadable font, 5x8 pixels wide.
+=item GD::Font->Large
+
+This is the basic large font, "borrowed" from a well known public
+domain 8x16 font.
 
 =item gdGiantFont
+
 =item GD::Font->Giant
 
 This is a 9x15 bold font converted by Jan Pazdziora from a sans serif
@@ -1915,7 +1919,7 @@ This returns the number of characters in the font.
 
 NOT IMPLEMENTED
 
-=item $font->offset
+=item $font->offset()
 
 This returns the ASCII value of the first character in the font
 
@@ -1988,7 +1992,7 @@ the $self->{previous_line_thickness} flag.
 
 The _reset() method is used to restore persistent drawing settings
 between uses of stylized brushes. Currently, this involves
-  
+
   - restoring line thickness
 
 =back
@@ -2029,7 +2033,7 @@ of GD with the power of SVG output. In part, it aims to do this by
 inheriting many methods from GD directly and bringing them into the
 functional space of GD.  This makes SVG::GD easier to set up initially
 (simply by adding the "use SVG::GD" below the "use GD" statement of
-your script. GD::SVG sacrfices this initial eas-of-setup for more
+your script. GD::SVG sacrfices this initial ease-of-setup for more
 targeted applications.
 
 =head1 ACKNOWLEDGEMENTS
@@ -2042,7 +2046,7 @@ SVG.
 
 =head1 AUTHOR
 
-Todd Harris, PhD E<lt>harris@cshl.org<gt>
+Todd Harris, PhD E<lt>harris@cshl.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
