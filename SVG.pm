@@ -7,7 +7,7 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.23';
+$VERSION = '0.24';
 #$VERSION = sprintf "0.%d%d", q$Revision: 1.25 $ =~ /(\d+)/g;
 #$VERSION = sprintf "0.%02d", q$Revision: 1.25 $ =~ /(\d+)/g;
 #$VERSION = sprintf "0.%d", q$Revision: 1.25 $ =~ /\d\.(\d+)/g;
@@ -234,7 +234,7 @@ sub GD::SVG::Image::colorAllocate {
   my $new_index = (defined $self->{colors_added}) ? scalar @{$self->{colors_added}} : 0;
   $self->{colors}->{$new_index} = [$r,$g,$b];
 
-  # Keep a list of colors in ther order that they are added as well
+  # Keep a list of colors in the order that they are added
   # This is used as a kludge for setBrush
   push (@{$self->{colors_added}},$new_index);
   return $new_index;
@@ -351,7 +351,7 @@ sub GD::SVG::Image::setBrush {
 # color.
 sub GD::SVG::Image::setStyle {
   my ($self,@colors) = @_;
-  ###GD### $self->{gd}->setStyle(@colors);
+  ###GD###$self->{gd}->setStyle(@colors);
   $self->{gdStyled}->{color} = [ @colors ];
   return;
 }
@@ -696,11 +696,10 @@ sub GD::SVG::Image::fillToBorder { shift->_error('fillToBorder'); }
 # Character And String Drawing
 ##################################################
 sub GD::SVG::Image::string {
-  my ($self,$font_obj,$x,$y,$text,$color_index,$transform) = @_;
+  my ($self,$font_obj,$x,$y,$text,$color_index) = @_;
   my $img = $self->{img};
   my $id = $self->_create_id($x,$y);
   my $formatting = $font_obj->formatting();
-  $transform ||= 'rotate(0)';
   my $color = $self->_get_color($color_index);
   my $result =
     $img->text(
@@ -708,16 +707,25 @@ sub GD::SVG::Image::string {
 	       x=>$x,
 	       y=>$y + $font_obj->{height} - TEXT_KLUDGE,
 	       %$formatting,
-	       transform => $transform,
 	       fill      => $color,
 	      )->cdata($text);
   return $result;
 }
 
-# I don't think this is positioned correctly...
 sub GD::SVG::Image::stringUp {
-  my ($self,@rest) = @_;
-  $self->string(@rest,'rotate(-90)');
+  my ($self,$font_obj,$x,$y,$text,$color_index) = @_;
+  my $img = $self->{img};
+  my $id = $self->_create_id($x,$y);
+  my $formatting = $font_obj->formatting();
+  my $color = $self->_get_color($color_index);
+  my $x = $x + $font_obj->height;
+  my $result =
+    $img->text(
+	       id=>$id,
+	       %$formatting,
+	       'transform' => "translate($x,$y) rotate(-90)",
+	       fill      => $color,
+	      )->cdata($text);
 }
 
 sub GD::SVG::Image::char {
@@ -727,7 +735,7 @@ sub GD::SVG::Image::char {
 
 sub GD::SVG::Image::charUp {
   my ($self,@rest) = @_;
-  $self->string(@rest,'rotate(-90)');
+  $self->stringUp(@rest);
 }
 
 # Replicating the TrueType handling
@@ -829,7 +837,7 @@ sub GD::SVG::Image::_build_style {
   my ($self,$id,$color,$fill,$stroke_opacity) = @_;
   my $thickness = $self->_get_thickness() || 1;
 
-  my $fill_opacity = ($fill) ? 1 : 0;
+  my $fill_opacity = ($fill) ? '1.0' : 0;
   $fill = ($fill) ? $self->_get_color($fill) : 'none';
   $stroke_opacity ||= '1.0';
   my %style = ('stroke'        => $self->_get_color($color),
@@ -1077,6 +1085,7 @@ sub formatting {
   my $weight  = $self->weight;
   my %format = ('font-size' => $size,
 		'font'       => $font,
+#		'writing-mode' => 'tb',
 	       );
   $format{'font-weight'} = $weight if ($weight);
   return \%format;

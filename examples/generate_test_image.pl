@@ -74,12 +74,21 @@ $image->line(250,80,750,80,$aqua);
 $image->line(250,85,750,85,$orange);
 $image->setThickness(1);
 
-# Styled and dashed lines
+# Styled lines
 $image->setStyle($black,$red,$red,$red,$red,$red,$red,$black,$black,$black,$black,$green);
 $image->line(250,90,750,90,gdStyled);
 
+# Brushed lines...
+my $brush = $image_class->new(3,3);
+$brush->colorAllocate(255,255,255);
+my $mystery_color = $brush->colorAllocate(100,100,100);
+$brush->setThickness(3);
+$brush->line(0,0,0,3,$mystery_color);
+$image->setBrush($brush);
+$image->line(250,96,750,96,gdBrushed);
+
 # Rectangles
-$yoffset = 90;
+$yoffset = 100;
 $yoffset += 15;
 $image->string(gdMediumBoldFont,10,$yoffset,'Rectangles...',$black);
 $image->rectangle(250,$yoffset,750,$yoffset+20,$black);
@@ -168,7 +177,7 @@ foreach my $x (@ellipses) {
   $color_index++;
 }
 
-# Filled ellipeses
+# Filled ellipses
 $yoffset += 30;
 $image->string(gdMediumBoldFont,10,$yoffset,'Filled ellipses...',$black);
 $color_index = 0;
@@ -274,5 +283,9 @@ $image->string(gdLargeFont,250,$yoffset+60,'gdLargeFont',$black);
 $image->string($font_class->Large,400,$yoffset+60,"$font_class->Large",$black);
 $image->string(gdGiantFont,250,$yoffset+80,'gdGiantFont',$black);
 $image->string($font_class->Giant,400,$yoffset+80,"$font_class->Giant",$black);
+
+$image->stringUp(gdGiantFont,370,$yoffset+100,'gdGiantFont',$black);
+$image->stringUp($font_class->Giant,550,$yoffset+100,"$font_class->Giant",$black);
+
 
 print $image->$image_type();
