@@ -1,5 +1,9 @@
 Revision history for Perl extension GD::SVG.
 
+0.25  Wed Jan 07 13.48.12 2004
+	- fixed a variable scoping issue that was throwing
+ 	  a warning
+
 0.24  Mon Dec 15 16:04:17 2003
 	- fixed the stringUp and charUp methods so that
           they are positioned properly

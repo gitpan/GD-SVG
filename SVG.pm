@@ -7,14 +7,14 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.24';
-#$VERSION = sprintf "0.%d%d", q$Revision: 1.25 $ =~ /(\d+)/g;
-#$VERSION = sprintf "0.%02d", q$Revision: 1.25 $ =~ /(\d+)/g;
-#$VERSION = sprintf "0.%d", q$Revision: 1.25 $ =~ /\d\.(\d+)/g;
-# $Id: SVG.pm,v 1.25 2003/12/03 20:14:42 todd Exp $
-
+$VERSION = '0.25';
+#$VERSION = sprintf "0.%d%d", q$Revision: 1.28 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%02d", q$Revision: 1.28 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%d", q$Revision: 1.28 $ =~ /\d\.(\d+)/g;
+# $Id: SVG.pm,v 1.28 2004/01/07 19:49:04 todd Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
+# Methods that support this are commented out multiple times (ie ######)
 use constant USEGD => 0;
 if (USEGD) {
   eval "use GD";
@@ -718,7 +718,7 @@ sub GD::SVG::Image::stringUp {
   my $id = $self->_create_id($x,$y);
   my $formatting = $font_obj->formatting();
   my $color = $self->_get_color($color_index);
-  my $x = $x + $font_obj->height;
+  $x .= $font_obj->height;
   my $result =
     $img->text(
 	       id=>$id,
@@ -1240,7 +1240,7 @@ packages.
 =item raster fill() and fillToBorder() not supported
 
 As SVG documents are not inherently aware of their canvas, the flood
-fill methods are not currently supported.n
+fill methods are not currently supported.
 
 =item getPixel() not supported.
 
