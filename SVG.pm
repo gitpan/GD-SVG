@@ -8,9 +8,9 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-#$VERSION = sprintf "0.%d%d", q$Revision: 1.21 $ =~ /(\d+)/g;
-#$VERSION = sprintf "0.%02d", q$Revision: 1.21 $ =~ /(\d+)/g;
-$VERSION = sprintf "0.%d", q$Revision: 1.21 $ =~ /\d\.(\d+)/g;
+#$VERSION = sprintf "0.%d%d", q$Revision: 1.22 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%02d", q$Revision: 1.22 $ =~ /(\d+)/g;
+$VERSION = sprintf "0.%d", q$Revision: 1.22 $ =~ /\d\.(\d+)/g;
 
 @ISA = qw(Exporter);
 %EXPORT_TAGS = ('cmp'  => [qw(GD_CMP_IMAGE 
@@ -39,6 +39,11 @@ $VERSION = sprintf "0.%d", q$Revision: 1.21 $ =~ /\d\.(\d+)/g;
 	     gdMaxColors
 	     gdStyledBrushed
 	     gdTiled
+	     gdChord
+	     gdEdged
+	     gdNoFill
+	     gdArc
+	     gdPie
 	    );
 
 # Not yet implemented
@@ -386,6 +391,13 @@ sub gdMaxColors   { _error('gdMaxColors'); }
 
 sub gdTransparent { return 'transparent'; }
 
+# Bitwise operations for filledArcs
+sub gdArc    { return 0; }
+sub gdPie    { return 0; }
+sub gdChord  { return 1; }
+sub gdEdged  { return 4; }
+sub gdNoFill { return 2; }
+
 sub gdAntiAliased { _error('gdAntiAliased'); }
 sub GD::SVG::Image::setAntiAliased { shift->_error('setAntiAliased'); }
 sub GD::SVG::Image::setAntiAliasedDontBlend { shift->_error('setAntiAliasedDontBlend'); }
@@ -396,9 +408,7 @@ sub GD::SVG::Image::setAntiAliasedDontBlend { shift->_error('setAntiAliasedDontB
 sub GD::SVG::Image::setPixel {
   my ($self,$x1,$y1,$color,$color2) = @_;
   ### $self->{gd}->setPixel($x1,$y1,$color);
-
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
+  my ($img,$id,$thickness) = $self->_prep($x1,$y1);
   my $result =
     $img->circle(cx=>$x1,cy=>$y1,r=>'0.03',
 		 id=>$id,
@@ -423,9 +433,7 @@ sub GD::SVG::Image::line {
     $self->line($x1,$y1,$x2,$y2,$fg);
   } else {
     ### $self->{gd}->line($x1,$y1,$x2,$y2,$color);
-    my $img = $self->{img};
-    my $id = $self->_create_id($x1,$y1);
-    my $thickness = $self->_get_thickness() || 1;
+    my ($img,$id,$thickness) = $self->_prep($x1,$y1);
     my $result = $img->line(x1=>$x1,y1=>$y1,
 			    x2=>$x2,y2=>$y2,
 			    id=>$id,
@@ -453,12 +461,9 @@ sub GD::SVG::Image::rectangle {
     $self->rectangle($x1,$y1,$x2,$y2,$fg,$fill);
   } else {
     ### $self->{gd}->rectangle($x1,$y1,$x2,$y2,$color);
-    my $img = $self->{img};
-    my $id = $self->_create_id($x1,$y1);
+    my ($img,$id,$thickness) = $self->_prep($x1,$y1);
     my $foreground = $self->{foreground};
     my $fg = ($color eq $foreground) ? $foreground : $color;
-    my $thickness = $self->_get_thickness() || 1;
-
     my $fill_opacity = ($fill) ? 1 : 0;
     $fill ||= 'none';
     my $result = 
@@ -494,16 +499,15 @@ sub GD::SVG::Image::polygon {
     $self->polygon($poly,$fg);
   } else {
     ### $self->{gd}->polygon($poly,$color);
-    my $img = $self->{img};
     # Create seperate x and y arrays of vertices
     my @xpoints = $poly->_fetch_vertices('x');
     my @ypoints = $poly->_fetch_vertices('y');
+
+    my ($img,$id,$thickness) = $self->_prep($xpoints[0],$ypoints[0]);
     my $points = $img->get_path(
 				x=>\@xpoints, y=>\@ypoints,
 				-type=>'polygon'
 			       );
-    my $id = $self->_create_id($xpoints[0],$ypoints[0]);
-    my $thickness = $self->_get_thickness() || 1;
     my $fill_opacity = ($fill) ? 1 : 0;
     $fill ||= 'none';
     my $result =
@@ -537,12 +541,12 @@ sub GD::SVG::Image::ellipse {
     $self->ellipse($x1,$y1,$width,$height,$fg);
   } else {
     ### $self->{gd}->ellipse($x1,$y1,$width,$height,$color);
-    my $img = $self->{img};
-    my $id = $self->_create_id($x1,$y1);
+    my ($img,$id,$thickness) = $self->_prep($x1,$y1);
+
     # GD uses width and height - SVG uses radii...
     $width  = $width / 2;
     $height = $height / 2;
-    my $thickness = $self->_get_thickness() || 1;
+
     my $fill_opacity = ($fill) ? '1' : '0';
     $fill ||= 'none';
     my $result =
@@ -572,6 +576,8 @@ sub GD::SVG::Image::filledEllipse {
 # GD uses the arc() and filledArc() methods in two capacities
 #   1. to create closed ellipses, where start and end are 0 and 360
 #   2. to create honest-to-god open arcs
+# The arc method is no longer being used to draw filledArcs.
+# All the fill-specific code within is no deprecated.
 sub GD::SVG::Image::arc {
   my ($self,$cx,$cy,$width,$height,$start,$end,$color,$fill) = @_;
   if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
@@ -581,29 +587,18 @@ sub GD::SVG::Image::arc {
     ### $self->{gd}->arc($x,$y,$width,$height,$start,$end,$color);
     # Are we just trying to draw a closed arc (an ellipse)?
     my $result;
-    if ($start eq '0' and $end eq '360') {
+    if ($start == 0 && $end == 360 || $end == 360 && $start == 0) {
       $result = $self->ellipse($cx,$cy,$width,$height,$color,$fill);
     } else {
-      my $img = $self->{img};
-      my $id = $self->_create_id($cx,$cy);
-      my $thickness = $self->_get_thickness() || 1;
+      my ($img,$id,$thickness) = $self->_prep($cx,$cy);
 
       # Taking a stab at drawing elliptical arcs
-      # GD uses diameters, SVG uses radii
-      my $a = $width  / 2;
-      my $b = $height / 2;
-
-      while ($start < 0 )    { $start += 360; }
-      while ($end < 0 )      { $end   += 360; }
-      while ($end < $start ) { $end   += 360; }
-      my ($startx,$starty) = _calculate_arc_coords($cx,$cy,$width,$height,$start);
-      my ($endx,$endy)     = _calculate_arc_coords($cx,$cy,$width,$height,$end);
+      my ($start,$end,$large,$sweep,$a,$b) = _calculate_arc_params($start,$end,$width,$height);
+      my ($startx,$starty) = _calculate_point_coords($cx,$cy,$width,$height,$start);
+      my ($endx,$endy)     = _calculate_point_coords($cx,$cy,$width,$height,$end);
 
       # M = move to (origin of the curve)
       # my $rotation = abs $start - $end;
-      my $large = (abs $start - $end > 180) ? 1 : 0;
-      # my $sweep = ($start > $end) ? 0 : 1;  # directionality of the arc, + CW, - CCW
-      my $sweep = 1; # Always CW with GD
       my $fill_opacity = ($fill) ? 1 : 0;
       $fill ||= 'none';
       $result =
@@ -616,15 +611,6 @@ sub GD::SVG::Image::arc {
 			   'fill-opacity'=> $fill_opacity,
 			  },
 		  );
-
-      # Now I need to draw a filled triangle to complete the filledArc
-      if ($fill ne 'none') {
-	my $poly = GD::SVG::Polygon->new();
-	$poly->addPt($cx,$cy);
-	$poly->addPt($startx,$starty);
-	$poly->addPt($endx,$endy);
-	$self->filledPolygon($poly,$color);
-      }
     }
     $self->_reset();
     return $result;
@@ -632,19 +618,113 @@ sub GD::SVG::Image::arc {
 }
 
 # Return the x and y positions of start and stop of arcs.
-sub _calculate_arc_coords {
+sub _calculate_point_coords {
   my ($cx,$cy,$width,$height,$angle) = @_;
   my $x = ( $cosT[$angle % 360] * $width)  / (2 * 1024) + $cx;
   my $y = ( $sinT[$angle % 360] * $height) / (2 * 1024) + $cy;
   return ($x,$y);
 }
 
-# filledArc needs to attach a filled triangle to the filledArc in
-# order to complete it
+sub _calculate_arc_params {
+  my ($start,$end,$width,$height) = @_;
+
+  # GD uses diameters, SVG uses radii
+  my $a = $width  / 2;
+  my $b = $height / 2;
+  
+  while ($start < 0 )    { $start += 360; }
+  while ($end < 0 )      { $end   += 360; }
+  while ($end < $start ) { $end   += 360; }
+
+  my $large = (abs $start - $end > 180) ? 1 : 0;
+  # my $sweep = ($start > $end) ? 0 : 1;  # directionality of the arc, + CW, - CCW
+  my $sweep = 1; # Always CW with GD
+  return ($start,$end,$large,$sweep,$a,$b);
+}
+
+
+# $fill_style may either be a style(s) or a color if a callback
 sub GD::SVG::Image::filledArc {
-  my ($self,$cx,$cy,$width,$height,$start,$end,$color) = @_;
-  my $result = $self->arc($cx,$cy,$width,$height,$start,$end,$color,$color);
-  return $result;
+  my ($self,$cx,$cy,$width,$height,$start,$end,$color,$fill_style) = @_;
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->filledArc($cx,$cy,$width,$height,$start,$end,$fg);
+  } else {
+    ### $self->{gd}->arc($x,$y,$width,$height,$start,$end,$color);
+    my $result;
+    
+    # distill the special colors, if provided...
+    my $fill_color;
+    # Set it to gdArc, the default value to avoid undef errors in comparisons
+    $fill_style ||= 0;
+    if ($fill_style =~ /rgb/) {
+      $fill_color = $fill_style;
+      # Need to account for those cases where someone might
+      # be trying to draw an outline ellipse
+    } elsif ($fill_style == 2 || $fill_style == 4 || $fill_style == 6) {
+      $fill_color = 'none';
+    } else {
+      $fill_color = $color;
+    }
+
+    # Are we just trying to draw a closed filled arc (an ellipse)?
+    if (($start == 0 && $end == 360) || ($start == 360 && $end == 0)) {
+      $result = $self->ellipse($cx,$cy,$width,$height,$color,$fill_color);
+    } else {
+      my ($img,$id,$thickness) = $self->_prep($cx,$cy);
+      my ($start,$end,$large,$sweep,$a,$b) = _calculate_arc_params($start,$end,$width,$height);
+      my ($startx,$starty) = _calculate_point_coords($cx,$cy,$width,$height,$start);
+      my ($endx,$endy)     = _calculate_point_coords($cx,$cy,$width,$height,$end);
+
+      # Evaluate the various fill styles
+      # gdEdged connects the center to the start and end
+      if ($fill_style == 4 || $fill_style == 6) {
+	$self->line($cx,$cy,$startx,$starty,$color);
+	$self->line($cx,$cy,$endx,$endy,$color);
+      }
+      
+      # gdNoFill outlines portions of the arc
+      # noFill or gdArc|gdNoFill
+      if ($fill_style == 2 || $fill_style == 6) {
+	$result = $self->arc($cx,$cy,$width,$height,$start,$end,$color);
+	return $result;
+      }
+
+      # gdChord|gdNofFill
+      if ($fill_style == 3) {
+	$result = $self->line($startx,$starty,$endx,$endy,$color);
+	return $result;
+      }
+      
+      # Create the actual filled portion of the arc
+      # This is the default behavior for gdArc and if no style is passed.
+      if ($fill_style == 0 || $fill_style == 4) {
+	# M = move to (origin of the curve)
+	# my $rotation = abs $start - $end;
+	my $fill_opacity = 1;
+	$result =
+	  $img->path('d'=>"M$startx,$starty "  .
+		     "A$a,$b 0 $large,$sweep $endx,$endy",
+		     style=>{
+			     'stroke'      => $color,
+			     'stroke-width'=> $thickness,
+			     'fill'        => $fill_color,
+			     'fill-opacity'=> $fill_opacity,
+			    },
+		    );
+      }
+      
+      # If we are filling, draw a filled triangle to complete.
+      # This is also the same as using gdChord by itself
+      my $poly = GD::SVG::Polygon->new();
+      $poly->addPt($cx,$cy);
+      $poly->addPt($startx,$starty);
+      $poly->addPt($endx,$endy);
+      $self->filledPolygon($poly,$color);
+    }
+    $self->_reset();
+    return $result;
+  }
 }
 
 # Flood fill that stops at first pixel of a different color.
@@ -783,6 +863,15 @@ sub GD::SVG::Image::can { return 0; }
 ##########################################
 # Internal routines for meshing with SVG #
 ##########################################
+# Fetch out typical params used for drawing.
+sub GD::SVG::Image::_prep {
+  my ($self,@params) = @_;
+  my $img = $self->{img};
+  my $id = $self->_create_id(@params);
+  my $thickness = $self->_get_thickness() || 1;
+  return ($img,$id,$thickness);
+}
+
 sub GD::SVG::Image::_create_id {
   my ($self,$x,$y) = @_;
   $self->{id_count}++;
@@ -965,8 +1054,6 @@ package GD::SVG::Font;
 use vars qw/@ISA/;
 @ISA = qw(GD::SVG);
 
-# I NEED TO replicate the package methods for GD::Font->Large (eg)
-
 # Return guestimated values on the font height and width
 sub width   { return shift->{width}; }
 sub height  { return shift->{height}; }
@@ -987,31 +1074,11 @@ sub formatting {
   return \%format;
 }
 
-sub Tiny {
-  my $this = GD::SVG::gdTinyFont;
-  return $this;
-}
-
-sub Small {
-  my $this = GD::SVG::gdSmallFont;
-  return $this;
-}
-
-sub MediumBold {
-  return GD::SVG::gdMediumBoldFont;
-#  my $this = GD::SVG::gdMediumBoldFont;
-#  return $this;
-}
-
-sub Large {
-  my $this = GD::SVG::gdLargeFont;
-  return $this;
-}
-
-sub Giant {
-  my $this = GD::SVG::gdGiantFont;
-  return $this;
-}
+sub Tiny  { return GD::SVG::gdTinyFont; }
+sub Small { return GD::SVG::gdSmallFont; }
+sub MediumBold { return GD::SVG::gdMediumBoldFont; }
+sub Large { return GD::SVG::gdLargeFont; }
+sub Giant { return GD::SVG::gdGiantFont; }
 
 sub _error {
   my ($self,$method) = @_;
@@ -1163,22 +1230,11 @@ fill methods are not currently supported.n
 Although setPixel() works as expected, its counterpart getPixel() is
 not supported. I plan to support this method in a future release.
 
-=item arc() and filledArc() partially supported
-
-Currently, GD::SVG supports the drawing of closed (ie full 360 degree
-arcs) and open arcs, but does not support the special arc styling
-methods such as gdChord and gdArc.
-
-=item Images can only be created dynamically, not from pre-existing images
-
-GD::SVG does not currently support the newFrom()
-methods. Consequently, it can only be used for the dynamic creation of
-images.
-
 =item No support for generation of images from filehandles or raw data
 
 GD::SVG works only with scripts that generate images directly in the
-code using the GD->new(height,width) approach.
+code using the GD->new(height,width) approach. newFrom() methods are
+not currently supported.
 
 =item Tiled fills are not supported
 
@@ -1633,6 +1689,14 @@ cates that the arc or chord should be outlined, not filled.  gdEdged,
 used together with gdNoFill, indicates that the beginning and ending
 angles should be connected to the center; this is a good way to
 outline (rather than fill) a "pie slice."
+
+Using these special styles, you can easily draw bordered ellipses and
+circles.
+
+# Create the filled shape:
+$image->filledArc($x,$y,$width,$height,0,360,$fill);
+# Now border it.
+$image->filledArc($x,$y,$width,$height,0,360,$color,gdNoFill);
 
 =item $image->fill();
 

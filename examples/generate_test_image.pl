@@ -23,7 +23,7 @@ sub BEGIN {
 
 my $yoffset;
 
-my $image = $image_class->new('800','800');
+my $image = $image_class->new('800','1000');
 
 # Allocate some colors
 my $white  = $image->colorAllocate(255,255,255);
@@ -39,16 +39,17 @@ my $green  = $image->colorAllocate(0,255,0);
 # Setting pixels
 my @colors = ($black,$red,$blue,$green,$yellow,$gray,$aqua,$orange);
 
-
 # Make the background transparent (and white)
 #$image->transparent($white);
 
+my $string = 'GD vs GD::SVG';
+$image->string(gdGiantFont,800/2-((gdGiantFont->width * length $string) / 2),1,$string,$black);
 
-$image->string(gdMediumBoldFont,10,10,'Setting pixels...',$black);
+$image->string(gdMediumBoldFont,10,15,'Setting pixels...',$black);
 my $color_index = 0;
 for (my $x=250;$x<=750;$x+=10) {
   my $color = $colors[$color_index];
-  $image->setPixel($x,20,$color);
+  $image->setPixel($x,25,$color);
   $color_index++;
   $color_index = 0 if ($color_index >= @colors);
 }
@@ -194,6 +195,8 @@ $color_index = 0;
 foreach my $x (@ellipses) {
   my $color = $colors[$color_index];
   $image->arc($x,$yoffset,80,25,0,360,$color);
+  # Somewhat stupidly, these can also be created as
+  $image->filledArc($x,$yoffset,80,25,0,360,$color,gdNoFill);
   $color_index++;
 }
 
@@ -238,19 +241,26 @@ foreach my $x (@ellipses) {
   $color_index++;
 }
 
-# filledArcs (open bordered)
+# filledArcs (special styles)
 $yoffset += 30;
-$image->string(gdMediumBoldFont,10,$yoffset,'Filled arcs (open and bordered)...',$black);
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled arcs (special styles)...',$black);
 $color_index = 0;
-foreach my $x (@ellipses) {
-  my $color = $colors[$color_index];
-  $image->filledArc($x,$yoffset,80,25,20,220,$color);
-  $image->arc($x,$yoffset,80,25,20,220,$color);
-  $color_index++;
-}
+
+$image->filledArc(290,$yoffset,80,25,60,160,$colors[$color_index++],gdEdged|gdNoFill);
+$image->string(gdTinyFont,250,$yoffset+20,'gdEdged|gdNoFill',$black);
+$image->filledArc(390,$yoffset,80,25,60,160,$colors[$color_index++],gdArc);
+$image->string(gdTinyFont,350,$yoffset+20,'gdArc',$black);
+$image->filledArc(490,$yoffset,80,25,60,160,$colors[$color_index++],gdChord);
+$image->string(gdTinyFont,450,$yoffset+20,'gdChord',$black);
+$image->filledArc(590,$yoffset,80,25,60,160,$colors[$color_index++],gdChord|gdNoFill);
+$image->string(gdTinyFont,550,$yoffset+20,'gdChord|gdNoFill',$black);
+
+$image->filledArc(690,$yoffset,80,25,60,160,$colors[$color_index++],gdArc);
+$image->filledArc(690,$yoffset,80,25,60,160,$colors[0],gdEdged|gdNoFill);
+$image->string(gdTinyFont,630,$yoffset+20,'gdArc, then gdEdged|gdNoFill',$black);
 
 # Fonts...
-$yoffset += 30;
+$yoffset += 40;
 $image->string(gdMediumBoldFont,10,$yoffset,'Fonts',$black);
 $image->string(gdTinyFont,250,$yoffset,'gdTinyFont',$black);
 $image->string($font_class->Tiny,400,$yoffset,"$font_class->Tiny",$black);

@@ -1,7 +1,11 @@
 Revision history for Perl extension GD::SVG.
 
+0.22  Sun Nov 30 11:33:04 2003
+	- added support for the filledArc exported special styles:
+	  gdArc, gdEdged, gdChord, gdPie, and gdNoFill
+
 0.21  Sat Nov 29 14:54:54 2003
-	- added support for both open and closed arcs generated
+	- added support for both open and closed arcs
 	- added support for $polygon->bounds();
 	- updated test script
 	- finally squashed the line thickness bug
