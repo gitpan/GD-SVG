@@ -5,10 +5,8 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 43;
-#use Test::Simple tests => 1;
-use GD::SVG;
-#BEGIN { use_ok('GD::SVG') };
+use Test::More tests => 46;
+BEGIN { use_ok('GD::SVG') };
 
 #########################
 
@@ -31,17 +29,25 @@ ok($image->colorsTotal > 0,'colorsTotal ok');
 # rgb()
 
 # drawing
-ok($image->setThickness(2) > 0,'setThickness ok');
-ok($image->setPixel(10,10,$black) > 0,'setPixel ok');
-ok($image->line(10,20,20,40,$black) > 0,'line ok');
-ok($image->rectangle(10,20,20,40,$black) > 0,'rectangle ok');
-ok($image->filledRectangle(10,20,20,40,$black) > 0,'filledRectangle ok');
-ok($image->ellipse(10,20,20,40,$black) > 0,'ellipse ok');
-ok($image->filledEllipse(10,20,20,40,$black) > 0,'filledEllipse ok');
+ok($image->setThickness(2),'setThickness ok');
+ok($image->setPixel(10,10,$black),'setPixel ok');
+ok($image->line(10,20,20,40,$black),'line ok');
+ok($image->rectangle(10,20,20,40,$black),'rectangle ok');
+ok($image->filledRectangle(10,20,20,40,$black),'filledRectangle ok');
+ok($image->ellipse(10,20,20,40,$black),'ellipse ok');
+ok($image->filledEllipse(10,20,20,40,$black),'filledEllipse ok');
 # arc
 # filledArc
 # fill
 # fillToBorder
+
+# setBrush
+my $brush = GD::SVG::Image->new(10,10);
+my $red = $brush->colorAllocate(255,255,255);
+my $white = $brush->colorAllocate(0,0,0);
+ok($image->setBrush($brush),'setBrush ok');
+
+ok($image->line(10,20,50,100,gdBrushed()),'drawing with gdBrushed ok');
 
 # polygons
 my $index = $polygon->addPt(30,30);
@@ -59,8 +65,8 @@ my ($x2,$y2) = $polygon->deletePt($index);
 ok(defined($y2),'deletePt ok');
 ok($polygon->length > 0,'polygon length ok');
 ok($polygon->vertices > 0,'vertices ok');
-ok($image->polygon($polygon,$black) > 0,'create polygon ok');
-ok($image->filledPolygon($polygon,$black) > 0,'create filledPolygon ok');
+ok($image->polygon($polygon,$black),'create polygon ok');
+ok($image->filledPolygon($polygon,$black),'create filledPolygon ok');
 ok($polygon->offset(10,10) > 0,'polygon offset ok');
 
 # Fonts

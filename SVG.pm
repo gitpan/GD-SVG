@@ -8,8 +8,8 @@ use warnings;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = sprintf "0.%d%d", q$Revision: 1.8 $ =~ /(\d+)/g;
-#$VERSION = sprintf "0.%02d", q$Revision: 1.8 $ =~ /(\d+)/g;
+$VERSION = sprintf "0.%d%d", q$Revision: 1.9 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%02d", q$Revision: 1.9 $ =~ /(\d+)/g;
 
 @ISA = qw(Exporter);
 
@@ -55,6 +55,9 @@ $VERSION = sprintf "0.%d%d", q$Revision: 1.8 $ =~ /(\d+)/g;
 #		);
 
 
+# A global debug flag which can be overriden by new()
+use constant DEBUG => 0;
+
 # GD does not allow dynamic creation of fonts. These default values
 # are approximate sizes for the various fonts based on an extensive
 # afternoon of cross-comparison ;)
@@ -87,20 +90,20 @@ use constant TEXT_KLUDGE       => '2';
 # Trap GD methods that are not yet implemented in SVG.pm
 sub AUTOLOAD {
   my $self = shift;
-  warn "GD method $AUTOLOAD is not implemented in GD::SVG";
+  warn "GD method $AUTOLOAD is not implemented in GD::SVG" if ($self->{debug} > 0);
 }
 
 # There must be a better way to trap these errors
-sub _error {
-  my $method = shift;
-  warn "GD method $method is not implemented in GD::SVG";
+sub GD::SVG::Image::_error {
+  my ($self,$method) = @_;
+  warn "GD method $method is not implemented in GD::SVG" if ($self->{debug} > 0);
 }
 
 #############################
 # GD::SVG::Image methods
 #############################
 sub GD::SVG::Image::new {
-  my ($self,$width,$height) = @_;
+  my ($self,$width,$height,$debug) = @_;
   my $this = bless {},$self;
   my $img = SVG->new(width=>$width,height=>$height);
   $this->{img} = $img;
@@ -115,6 +118,7 @@ sub GD::SVG::Image::new {
   # black This, for the most part, works for Bio::Graphics This
   # certainly needs to be fixed...
   $this->{foreground} = $this->colorAllocate('0','0','0');
+  $this->{debug} = ($debug) ? $debug : DEBUG;
   return $this;
 }
 
@@ -126,7 +130,7 @@ sub GD::SVG::Image::svg {
   my $self = shift;
   my $img = $self->{img};
   $img->xmlify(-pubid => "-//W3C//DTD SVG 1.0//EN",
-               -inline   => 1);
+               -inline => 1);
 }
 
 #############################
@@ -139,14 +143,19 @@ sub GD::SVG::Image::colorAllocate {
   $b ||= 0;
   my $color = "rgb($r,$g,$b)";
   my $gd = _internal_gd($self);
-  my $gd_color = $gd->colorAllocate($r,$g,$b);
+  my $index = $gd->colorAllocate($r,$g,$b);
+
+  # This storage of colors is redundant and needs to be cleaned up
 
   # Save GDs color_index, keyed by the RGB triplet that SVG utilizes.
-  $self->{color_index}->{$color} = $gd_color;
+  # As well as the raw rgb triplet...
+  $self->{color_index}->{$color} = [$index,$r,$g,$b];
+  # Keep a list of colors in ther order that they are added as well
+  push (@{$self->{colors_added}},$color);
   return $color;
 }
 
-sub GD::SVG::Image::colorAllocateAlpha { _error('colorAllocateAlpha'); }
+sub GD::SVG::Image::colorAllocateAlpha { shift->_error('colorAllocateAlpha'); }
 
 sub GD::SVG::Image::colorDeallocate {
   my ($self,$index) = @_;
@@ -177,7 +186,7 @@ sub GD::SVG::Image::colorClosest {
   #  return $self->{closestcache}{"@c"} = $self->{translations}{$index};
 }
 
-sub GD::SVG::Image::colorClosestHWB { _error('colorClosestHWB'); }
+sub GD::SVG::Image::colorClosestHWB { shift->_error('colorClosestHWB'); }
 
 sub GD::SVG::Image::colorExact {
   my ($self,$r,$g,$b) = @_;
@@ -189,7 +198,7 @@ sub GD::SVG::Image::colorExact {
   }
 }
 
-sub GD::SVG::Image::colorResolve    { _error('colorResolve'); }
+sub GD::SVG::Image::colorResolve    { shift->_error('colorResolve'); }
 
 sub GD::SVG::Image::colorsTotal {
   my $self = shift;
@@ -211,21 +220,52 @@ sub GD::SVG::Image::getPixel {
 }
 
 # Given the color index, return its rgb index...  GD::SVG does not
-# pass indices, instead using stringified RGB triplets.
+# pass indices, instead using stringified RGB triplets. This makes it
+# simple to return the rgb triplet from the "index" value...
 sub GD::SVG::Image::rgb {
   my ($self,$index) = @_;
+  $index =~ /rgb\((.*),(.*),(.*)\)/;
+  my $r = $1;
+  my $g = $2;
+  my $b = $3;
+  return ($r,$g,$b);
+
+  # This is a more in depth approach that allows me to maintain the state
+  # of the internal GD object as well.
+  
   # Invert the internal color index hash
-  my %indices = map { $self->{color_index}->{$_} => $_ } keys %{$self->{color_index}};
-  my $color = $indices{$index};
-  return $color;
+  #  my %indices = map { $self->{color_index}->{$_} => $_ } keys %{$self->{color_index}};
+  #  my $color = $indices{$index};
+  #  return $color;
 }
 
-sub GD::SVG::Image::transparent { _error('transparent'); }
+sub GD::SVG::Image::transparent { shift->_error('transparent'); }
 
 #######################
 # Special Colors
 #######################
-sub GD::SVG::Image::setBrush { _error('setBrush'); }
+# Kludgy preliminary support for gdBrushed This is based on
+# Bio::Graphics implementation of set_pen which in essence just
+# controls line color and thickness...  We will assume that the last
+# color added is intended to be the foreground color.
+sub GD::SVG::Image::setBrush {
+  my ($self,$pen) = @_;
+  my ($width,$height) = $pen->getBounds();
+  my $last_color = $pen->{colors_added}->[-1];
+  my ($r,$g,$b) = $self->rgb($last_color);
+  $self->{gdBrushed}->{fg} = $self->colorAllocate($r,$g,$b);
+  $self->{gdBrushed}->{thickness} = $width;
+}
+
+# There is no direct translation of gdStyled.  In gd, this is used to
+# set the style for the line usiing the settings of the current brush.
+# Drawing with the new style is then used by passing the gdStyled as a
+# color.
+sub GD::SVG::Image::setStyle {
+  my ($self,@params) = @_;
+  $self->{current_style} = [ @params ];
+  return;
+}
 
 # Lines in GD are 1 pixel in diameter by default.
 # setThickness allows line thickness to be changed.
@@ -234,19 +274,9 @@ sub GD::SVG::Image::setBrush { _error('setBrush'); }
 sub GD::SVG::Image::setThickness {
   my ($self,$thickness) = @_;
   $self->{line_thickness} = $thickness;
+  # Store this until later as well.
+  $self->{prev_line_thickness} = $thickness;
 }
-
-# There is no direct translation of gdStyled.  In gd, this is used to
-# set the style for the line usiing the settings of the current brush.
-# Drawing with the new style is then used by passing the gdStyled as a
-# color.
-# I could probably implement this in SVG using polyline.
-sub GD::SVG::Image::setStyle {
-  my ($self,@params) = @_;
-  $self->{current_style} = [ @params ];
-  return;
-}
-
 
 
 ##################################################
@@ -261,218 +291,281 @@ sub GD::SVG::Image::setStyle {
 # lines. I'll handle it similarly to gdStyled...
 # This might just be as simple as setting the color to the background color.
 # (This, of course, will not work for syled lines).
-sub gdStyled { return 'styled'; }
-sub gdBrushed { return 'brushed'; }
+sub gdStyled  { return 'gdStyled'; }
+sub gdBrushed { return 'gdBrushed'; }
 
+sub gdStyledBrush { _error('gdStyledBrush'); }
 sub gdTiled       { _error('gdTiled'); }
 sub gdDashSize    { _error('gdDashSize'); }
 sub gdMaxColors   { _error('gdMaxColors'); }
-sub gdStyledBrush { _error('gdStyledBrush'); }
 
 sub gdTransparent { return 'transparent'; }
 
-
 sub gdAntiAliased { _error('gdAntiAliased'); }
-sub GD::SVG::Image::setAntiAliased { _error('setAntiAliased'); }
-sub GD::SVG::Image::setAntiAliasedDontBlend { _error('setAntiAliasedDontBlend'); }
+sub GD::SVG::Image::setAntiAliased { shift->_error('setAntiAliased'); }
+sub GD::SVG::Image::setAntiAliasedDontBlend { shift->_error('setAntiAliasedDontBlend'); }
 
 #######################
 # Drawing subroutines #
 #######################
-# setPixel is actually just drawing a circle
 sub GD::SVG::Image::setPixel {
   my ($self,$x1,$y1,$color,$color2) = @_;
   my $img = $self->{img};
   my $id = $self->_create_id($x1,$y1);
-  $img->circle(cx=>$x1,cy=>$y1,r=>'0.03',
-	       id=>$id,
-	       style=>{
-		       'stroke'=>$color,
-		       'fill'=>$color,
-		       # 'stroke-opacity'=>'0.5',
-		       'fill-opacity'=>'1.0'
-		      }
-	      );
+  my $result =
+    $img->circle(cx=>$x1,cy=>$y1,r=>'0.03',
+		 id=>$id,
+		 style=>{
+			 'stroke'=>$color,
+			 'fill'=>$color,
+			 # 'stroke-opacity'=>'0.5',
+			 'fill-opacity'=>'1.0'
+			}
+		);
+  return $result;
 }
-
 
 sub GD::SVG::Image::line {
   my ($self,$x1,$y1,$x2,$y2,$color) = @_;
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
-  
-  my $thickness = _get_thickness($self) || 1;
-  # Are we trying to draw with a styled line? If so,
-  # lets fetch the style and then use the polyline method.
-  # Drawing with styled lines is not yet implemented
-  if ($color eq 'styled' || $color eq 'transparent') {
-    #  $self->_fetch_style();   # This will be used for generating styled lines
-    $img->line(x1=>$x1,y1=>$y1,
-	       x2=>$x2,y2=>$y2,
-	       id=>$id,
-	       style => {
-			 'stroke'         => $color,
-			 'stroke-opacity' => '1',
-			 'stroke-width'   => $thickness,
-			 'fill'           => $color,
-			 'fill-opacity'   => '1',
-			}
-	      );
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->line($x1,$y1,$x2,$y2,$fg);
   } else {
-    $img->line(x1=>$x1,y1=>$y1,
-	       x2=>$x2,y2=>$y2,
-	       id=>$id,
-	       style => {
-			 'stroke' => $color,
-			 'stroke-opacity' => '1',
-			 'stroke-width'   => $thickness,
-			 'fill'   => $color,
-			 'fill-opacity'   => '1',
-			}
-	      );
+    my $img = $self->{img};
+    my $id = $self->_create_id($x1,$y1);
+    my $thickness = $self->_get_thickness() || 1;
+    my $result = $img->line(x1=>$x1,y1=>$y1,
+			    x2=>$x2,y2=>$y2,
+			    id=>$id,
+			    style => {
+				      'stroke' => $color,
+				      'stroke-opacity' => '1',
+				      'stroke-width'   => $thickness,
+				      'fill'   => $color,
+				      'fill-opacity'   => '1',
+				     }
+			   );
+    $self->_reset();
+    return $result;
   }
 }
 
 
-sub GD::SVG::Image::dashedLine { _error('dashedLine'); }
+sub GD::SVG::Image::dashedLine { shift->_error('dashedLine'); }
 
 sub GD::SVG::Image::rectangle {
   my ($self,$x1,$y1,$x2,$y2,$color) = @_;
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
-  my $foreground = $self->{foreground};
-  my $fg = ($color eq $foreground) ? $foreground : $color;
-  my $thickness = _get_thickness($self) || 1;
-  $img->rectangle(x=>$x1,y=>$y1,
-		  width  =>$x2-$x1,
-		  height =>$y2-$y1,
-		  id     =>$id,
-		  style  => {
-			     'stroke'         => $color,
-			     'stroke-width'   => $thickness,
-			     'stroke-opacity' => '1',
-			     'fill-opacity'   => '0'
-			    }
-		 );
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->rectangle($x1,$y1,$x2,$y2,$fg);
+  } else {
+    my $img = $self->{img};
+    my $id = $self->_create_id($x1,$y1);
+    my $foreground = $self->{foreground};
+    my $fg = ($color eq $foreground) ? $foreground : $color;
+    my $thickness = $self->_get_thickness() || 1;
+    my $result = 
+      $img->rectangle(x=>$x1,y=>$y1,
+		      width  =>$x2-$x1,
+		      height =>$y2-$y1,
+		      id     =>$id,
+		      style  => {
+				 'stroke'         => $color,
+				 'stroke-width'   => $thickness,
+				 'stroke-opacity' => '1',
+				 'fill-opacity'   => '0'
+				}
+		     );
+    $self->_reset();
+    return $result;
+  }
 }
 
 # This is EXACTLY the same as the rectangle method above
 # I should just use it but pass a flag for the fill opacity
 sub GD::SVG::Image::filledRectangle {
   my ($self,$x1,$y1,$x2,$y2,$color) = @_;
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
-  my $thickness = _get_thickness($self) || 1;
-  $img->rectangle(x=>$x1,y=>$y1,
-		  width  =>$x2-$x1,
-		  height =>$y2-$y1,
-		  id     =>$id,
-		  style  => {
-			     #stroke =>$self->{foreground},
-			     stroke =>$color,
-			     'stroke-width' => $thickness,
-			     fill   =>$color,
-			     # 'stroke-opacity' => '0',
-			     # 'fill-opacity'   => '0'
-			    }
-		 );
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->filledRectangle($x1,$y1,$x2,$y2,$fg);
+  } else {
+    my $img = $self->{img};
+    my $id = $self->_create_id($x1,$y1);
+    my $thickness = $self->_get_thickness() || 1;
+    my $result =
+      $img->rectangle(x=>$x1,y=>$y1,
+		      width  =>$x2-$x1,
+		      height =>$y2-$y1,
+		      id     =>$id,
+		      style  => {
+				 #stroke =>$self->{foreground},
+				 stroke =>$color,
+				 'stroke-width' => $thickness,
+				 fill   =>$color,
+				 # 'stroke-opacity' => '0',
+				 # 'fill-opacity'   => '0'
+				}
+		     );
+    $self->_reset();
+    return $result;
+  }
 }
 
 sub GD::SVG::Image::polygon {
-  my ($self,$poly,$stroke) = @_;
-  my $img = $self->{img};
-  
-  # Create seperate x and y arrays of vertices
-  my @xpoints = $poly->fetch_vertices('x');
-  my @ypoints = $poly->fetch_vertices('y');
-  my $points = $img->get_path(
-			    x=>\@xpoints, y=>\@ypoints,
-			    -type=>'polygon'
-			   );
-  my $id = $self->_create_id($xpoints[0],$ypoints[0]);
-  my $thickness = _get_thickness($self) || 1;
-  $img->polygon(
-		%$points,
-		id=>$id,
-		style=>{
-			'stroke'=>$stroke,
-			'stroke-opacity'=>'1.0',
-			'stroke-width' => $thickness,			
-			'fill'=>$stroke,
-			'fill-opacity'=>'0'
-		       }
-	       )
+  my ($self,$poly,$color) = @_;
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->polygon($poly,$fg);
+  } else {
+    my $img = $self->{img};
+    
+    # Create seperate x and y arrays of vertices
+    my @xpoints = $poly->fetch_vertices('x');
+    my @ypoints = $poly->fetch_vertices('y');
+    my $points = $img->get_path(
+				x=>\@xpoints, y=>\@ypoints,
+				-type=>'polygon'
+			       );
+    my $id = $self->_create_id($xpoints[0],$ypoints[0]);
+    my $thickness = $self->_get_thickness() || 1;
+    my $result =
+      $img->polygon(
+		    %$points,
+		    id=>$id,
+		    style=>{
+			    'stroke'=>$color,
+			    'stroke-opacity'=>'1.0',
+			    'stroke-width' => $thickness,			
+			    'fill'=>$color,
+			    'fill-opacity'=>'0'
+			   }
+		   );
+    $self->_reset();
+    return $result;
+  }
 }
 
 # Passing the stroke doesn't really work as expected...
 sub GD::SVG::Image::filledPolygon {
-  my ($self,$poly,$fill,$stroke) = @_;
-  my $img = $self->{img};
-
-  # Create seperate x and y arrays of vertices
-  my @xpoints = $poly->fetch_vertices('x');
-  my @ypoints = $poly->fetch_vertices('y');
-  my $points = $img->get_path(
-			    x=>\@xpoints, y=>\@ypoints,
-			    -type=>'polygon'
-			   );
-  my $id = $self->_create_id($xpoints[0],$ypoints[0]);
-  my $thickness = _get_thickness($self) || 1;
-  $img->polygon(
-		%$points,
-		id=>$id,
-		style=>{
-			'stroke'=>$stroke,
-			'stroke-opacity'=>'1.0',
-			'stroke-width' => $thickness,			
-			'fill'=>$fill,
-			'fill-opacity'=>'1.0'
-		       }
-	       )
+  my ($self,$poly,$color,$stroke) = @_;
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->filledPolygon($poly,$fg,$stroke);
+  } else {
+    my $img = $self->{img};
+    # Create seperate x and y arrays of vertices
+    my @xpoints = $poly->fetch_vertices('x');
+    my @ypoints = $poly->fetch_vertices('y');
+    my $points = $img->get_path(
+				x=>\@xpoints, y=>\@ypoints,
+				-type=>'polygon'
+			       );
+    my $id = $self->_create_id($xpoints[0],$ypoints[0]);
+    my $thickness = $self->_get_thickness() || 1;
+    my $result =
+      $img->polygon(
+		    %$points,
+		    id=>$id,
+		    style=>{
+			    'stroke'=>$stroke,
+			    'stroke-opacity'=>'1.0',
+			    'stroke-width' => $thickness,			
+			    'fill'=>$color,
+			    'fill-opacity'=>'1.0'
+			   }
+		   );
+    $self->_reset();
+    return $result;
+  }
 }
 
 sub GD::SVG::Image::ellipse {
   my ($self,$x1,$y1,$width,$height,$color) = @_;
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
-  # GD uses width and height - SVG uses radii...
-  $width  = $width / 2;
-  $height = $height / 2;
-  my $thickness = _get_thickness($self) || 1;
-  $img->ellipse(
-		cx=>$x1, cy=>$y1,
-		rx=>$width, ry=>$height,
-		id=>$id,
-		style=>{
-			'stroke'=>$color,
-			'stroke-width' => $thickness,
-			'stroke-opacity'=>'1.0',
-			'fill-opacity'=>'0'
-		       }
-	       );
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->ellipse($x1,$y1,$width,$height,$fg);
+  } else {
+    my $img = $self->{img};
+    my $id = $self->_create_id($x1,$y1);
+    # GD uses width and height - SVG uses radii...
+    $width  = $width / 2;
+    $height = $height / 2;
+    my $thickness = $self->_get_thickness() || 1;
+    my $result =
+      $img->ellipse(
+		    cx=>$x1, cy=>$y1,
+		    rx=>$width, ry=>$height,
+		    id=>$id,
+		    style=>{
+			    'stroke'=>$color,
+			    'stroke-width' => $thickness,
+			    'stroke-opacity'=>'1.0',
+			    'fill-opacity'=>'0'
+			   }
+		   );
+    $self->_reset();
+    return $result;
+  }
 }
 
 sub GD::SVG::Image::filledEllipse {
   my ($self,$x1,$y1,$width,$height,$color) = @_;
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
-  # GD uses width and height - SVG uses radii...
-  $width  = $width / 2;
-  $height = $height / 2;
-  my $thickness = _get_thickness($self) || 1;
-  $img->ellipse(
-		cx=>$x1, cy=>$y1,
-		rx=>$width, ry=>$height,
-		id=>$id,
-		style=>{
-			'stroke'=>$color,
-			'stroke-width' => $thickness,
-			'stroke-opacity'=>'1.0',
-			'fill'=>$color,
-			'fill-opacity'=>'1.0'
-		       }
-	       );
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->filledEllipse($x1,$y1,$width,$height,$fg);
+  } else {
+    my $img = $self->{img};
+    my $id = $self->_create_id($x1,$y1);
+    # GD uses width and height - SVG uses radii...
+    $width  = $width / 2;
+    $height = $height / 2;
+    my $thickness = $self->_get_thickness() || 1;
+    my $result =
+      $img->ellipse(
+		    cx=>$x1, cy=>$y1,
+		    rx=>$width, ry=>$height,
+		    id=>$id,
+		    style=>{
+			    'stroke'=>$color,
+			    'stroke-width' => $thickness,
+			    'stroke-opacity'=>'1.0',
+			    'fill'=>$color,
+			    'fill-opacity'=>'1.0'
+			   }
+		   );
+    $self->_reset();
+    return $result;
+  }
 }
+
 
 # I cannot easily create arcs via SVG.pm...
 # Can i pass parameters anonymously?
@@ -481,28 +574,39 @@ sub GD::SVG::Image::filledEllipse {
 # Can this method create ellipses as well?
 sub GD::SVG::Image::arc {
   my ($self,$x1,$y1,$width,$height,$start,$end,$color) = @_;
-  my $img = $self->{img};
-  my $id = $self->_create_id($x1,$y1);
-  # GD uses width and height - SVG uses radii...
-  $width  = $width  / 2;
-  $height = $height / 2;
-
-  # This needs to create two ellipses based on the start and end
-  # and then transform them to bring out the arc...
-  my $thickness = _get_thickness($self) || 1;
-  $img->path('x'=>$x1,'y'=>$y1,'rx'=>$width,'ry'=>$height,
-	     style=>{
-		     'stroke'=>$color,
-		     'stroke-width'=> $thickness,
-		     'fill'=>$color,
-		    }
-	    );
+  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
+  # If so, we need to deconstruct the values for line thickness and
+  # foreground color
+  # This needs to be generalized for gdStyled as well
+  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
+    my $fg = $self->_distill_gdBrushed($color);
+    $self->arc($x1,$y1,$width,$height,$start,$end,$fg);
+  } else {
+    my $img = $self->{img};
+    my $id = $self->_create_id($x1,$y1);
+    # GD uses width and height - SVG uses radii...
+    $width  = $width  / 2;
+    $height = $height / 2;
+    
+    # This needs to create two ellipses based on the start and end
+    # and then transform them to bring out the arc...
+    my $thickness = $self->_get_thickness() || 1;
+    my $result =
+      $img->path('x'=>$x1,'y'=>$y1,'rx'=>$width,'ry'=>$height,
+		 style=>{
+			 'stroke'=>$color,
+			 'stroke-width'=> $thickness,
+			 'fill'=>$color,
+			}
+		);
+    $self->_reset();
+    return $result;
+  }
 }
 
-sub GD::SVG::Image::filledArc    { _error('filledArc'); }
-sub GD::SVG::Image::fill         { _error('fill'); }
-sub GD::SVG::Image::fillToBorder { _error('fillToBorder'); }
-
+sub GD::SVG::Image::filledArc    { shift->_error('filledArc'); }
+sub GD::SVG::Image::fill         { shift->_error('fill'); }
+sub GD::SVG::Image::fillToBorder { shift->_error('fillToBorder'); }
 
 ##################################################
 # Image Copying Methods
@@ -525,13 +629,16 @@ sub GD::SVG::Image::string {
   my $id = $self->_create_id($x,$y);
   my $formatting = $font_obj->formatting();
   $transform ||= 'rotate(0)';
-  $img->text(
-	     id=>$id,
-	     x=>$x,
-	     y=>$y + $font_obj->{height} - TEXT_KLUDGE,
-	     %$formatting,
-	     transform => $transform,
-	    )->cdata($text);
+  my $result =
+    $img->text(
+	       id=>$id,
+	       x=>$x,
+	       y=>$y + $font_obj->{height} - TEXT_KLUDGE,
+	       %$formatting,
+	       transform => $transform,
+	       'fill'=>$color,
+	      )->cdata($text);
+  return $result;
 }
 
 # I don't think this is positioned correctly...
@@ -551,19 +658,19 @@ sub GD::SVG::Image::charUp {
 }
 
 # Replicating the TrueType handling
-#sub GD::Image::stringFT { _error('stringFT'); }
+#sub GD::Image::stringFT { shift->_error('stringFT'); }
 
 
 ##################################################
 # Alpha Channels
 ##################################################
-sub GD::SVG::Image::alphaBlending { _error('alphaBlending'); }
-sub GD::SVG::Image::saveAlpha     { _error('saveAlpha'); }
+sub GD::SVG::Image::alphaBlending { shift->_error('alphaBlending'); }
+sub GD::SVG::Image::saveAlpha     { shift->_error('saveAlpha'); }
 
 ##################################################
 # Miscellaneous Image Methods
 ##################################################
-sub GD::SVG::Image::interlaced { _error('inerlaced'); }
+sub GD::SVG::Image::interlaced { shift->_error('inerlaced'); }
 
 sub GD::SVG::Image::getBounds {
   my $self = shift;
@@ -572,10 +679,10 @@ sub GD::SVG::Image::getBounds {
   return($width,$height);
 }
 
-sub GD::SVG::Image::isTrueColor { _error('isTrueColor'); }
-sub GD::SVG::Image::compare     { _error('compare'); }
-sub GD::SVG::Image::clip        { _error('clip'); }
-sub GD::SVG::Image::boundsSafe  { _error('boundsSafe'); }
+sub GD::SVG::Image::isTrueColor { shift->_error('isTrueColor'); }
+sub GD::SVG::Image::compare     { shift->_error('compare'); }
+sub GD::SVG::Image::clip        { shift->_error('clip'); }
+sub GD::SVG::Image::boundsSafe  { shift->_error('boundsSafe'); }
 
 
 ################################
@@ -639,6 +746,23 @@ sub GD::SVG::Image::_create_id {
   return (join('-',$self->{id_count},$x,$y));
 }
 
+# Break apart the internal representation of gdBrushed
+# setting the line thickness and returning the foreground color
+sub GD::SVG::Image::_distill_gdBrushed {
+  my ($self,$type) = @_;
+  $self->{prev_line_thickness} = $self->_get_thickness();
+  my $thickness = $self->{$type}->{thickness};
+  my $fg = $self->{$type}->{fg};
+  $self->setThickness($thickness);
+  return $fg;
+}
+
+
+# Reset presistent drawing settings between uses of stylized brushes
+sub GD::SVG::Image::_reset {
+  my $self = shift;
+  $self->{line_thickness} = $self->{prev_line_thickness};
+}
 
 # SVG needs some self-awareness so that post-drawing operations can
 # occur. This is accomplished by tracking all of the pixels that have
@@ -654,8 +778,9 @@ sub _save {
   #  push (@{$self->{pixels_filled}},$path);
 }
 
+# Value-access methods
 # Get the thickness of the line (if it has been set)
-sub _get_thickness {  return shift->{line_thickness} }
+sub GD::SVG::Image::_get_thickness {  return shift->{line_thickness} }
 
 # return the internal GD object
 sub _internal_gd { return shift->{internal_gd} }
@@ -762,8 +887,13 @@ sub offset {
   return $c;
 }
 
-sub map       { _error('GD::SVG::Polygon::map'); }
-sub transform { _error('GD::SVG::Polygon::transform'); }
+sub map       { shift->_error('GD::SVG::Polygon::map'); }
+sub transform { shift->_error('GD::SVG::Polygon::transform'); }
+
+sub _error {
+  my ($self,$method) = @_;
+  GD::SVG::Image->_error($method);
+}
 
 sub DESTROY { }
 
@@ -784,7 +914,7 @@ sub width   { return shift->{width}; }
 sub height  { return shift->{height}; }
 sub font    { return shift->{font}; }
 sub weight  { return shift->{weight}; }
-sub nchars  { } # NOT SUPPORTED!!
+sub nchars  { shift->_error('nchars')} # NOT SUPPORTED!!
 
 # Build the formatting hash for each font...
 sub formatting {
@@ -825,6 +955,11 @@ sub Giant {
   return $this;
 }
 
+sub _error {
+  my ($self,$method) = @_;
+  GD::SVG::Image->_error($method);
+}
+
 sub DESTROY { }
 
 
@@ -857,7 +992,7 @@ method calls).
 
 =head1 EXPORTS
 
-GD::SVG exports the same methods as GD itself overriding those
+GD::SVG exports the same methods as GD itself, overriding those
 methods.
 
 =head1 USAGE
@@ -875,31 +1010,43 @@ be changed to GD::SVG. Thus:
     GD::Font     becomes  GD::SVG::Font
     GD::Polygon  becomes  GD::SVG::Polygon
 
-=head1 DYAMICALLY SELECTING SVG OUTPUT
+=head1 DYNAMICALLY SELECTING SVG OUTPUT
 
 If you would like your script to be able to dynamically select either
-png or jpeg output (via GD) or SVG output (via GD::SVG), you should
+PNG or JPEG output (via GD) or SVG output (via GD::SVG), you should
 place your "use" statement within an eval. In the example below, each
 of the available classes is created at the top of the script for
 convenience, as well as the image output type.
 
-    my $package = shift;
-    eval "use $package";
-    my $image_class = $package . '::Image';
-    my $poly_class  = $package . '::Polygon';
-    my $font_class  = $package . '::Font';
+  my $package = shift;
+  eval "use $package";
+  my $image_pkg = $package . '::Image';
+  my $poly_pkg  = $package . '::Polygon';
+  my $font_pkg  = $package . '::Font';
     
-    # Creating new images or polygons thus becomes
-    my $image   = $image_class->new($width,$height);
-    my $polygon = $poly_class->new();
+  # Creating new images or polygons thus becomes
+  my $image   = $image_pkg->new($width,$height);
+  my $polygon = $poly_pkg->new();
 
-    # Establish the image output type
-    my $image_type;
-    if ($package = 'GD::SVG') {
-      $image_type = 'svg';
-    } else {
-      $image_type = 'png';
-    }
+  # Establish the image output type
+  my $image_type;
+  if ($package = 'GD::SVG') {
+    $image_type = 'svg';
+  } else {
+    $image_type = 'png';
+  }
+
+Finally, you should change all GD::Image, GD::Font, and GD::Polygon
+references to $image_pkg->, $font_pkg->, $poly_pkg->, respectively.
+
+  GD::Image->new()   becomes   $image_pkg->new()
+  GD::Font->Large()  becomes   $font_pkg->Large()
+  GD::Polygon->new() becomes   $poly_pkg->new()
+
+If you make heavy use of GD's exported methods, it may also be
+necessary to add () to the endo of method names to avoide bareword
+compilation errors. That's the price you pay for using exported
+functions!
 
 =head1 IMPORTANT NOTES
 
@@ -916,6 +1063,15 @@ through the remainder of this document for options on specific In
 addition, several functions have yet to be mapped to SVG.pm
 calls. Please see the section below regarding regarding GD functions
 that are missing or altered in GD::SVG.
+
+A similar module (SVG::GD) implements a similar wrapper around
+GD. Please see the section at the bottom of this document that
+compares GD::SVG to SVG::GD.
+
+=head1 PREREQUISITES
+
+GD::SVG requires the Ronan Oger's SVG.pm module, Lincoln Stein's GD.pm
+module, libgd and its dependencies.
 
 =head1 GENERAL DIFFICULTIES IN TRANSLATING GD TO SVG
 
@@ -951,23 +1107,20 @@ code using the GD->new(height,width) approach.
 
 Any functions passed gdTiled objects will die.
 
-=item The "arrow" glyph is not rendered properly
+=item Styled and Brushed lines only partially implemented
 
-Width and color settings for the arrow glyph are ignored. This results
-in arrows appearing as 1 pixel black lines in SVG.
-
-=item Styled lines are not implemented
-
-Calls to the gdStyled, gdTransparent, and gdBrushed functions are
-supported, although they will have no effect on the resulting
-image. Consequently styled lines (such as dashed lines) in PNG images
-will appear as solid lines in SVG.
+Calls to the gdStyled, gdTransparent, and gdBrushed functions via a
+rather humorous kludge (and simplification). Depending on the
+complexity of the brush, they may behave from slightly differently to
+radically differently from their behavior under GD. You have been
+warned. See the documentation sections for the methods that set these
+options (setStyle, setBrushed, and setTransparent).
 
 =back
 
 =head1 WHEN THINGS GO WRONG
 
-GD is a complicated module.  Translating gd methods into those
+GD is a complicated module.  Translating GD methods into those
 required to draw in SVG are not always direct. You may or may not get
 the output you expect. In general, some tweaking of image parameters
 (like text height and width) may be necessary.
@@ -981,44 +1134,104 @@ of image generation.  In particular, check for instances where you
 calculate dimensions of items on the fly like font->height. In SVG,
 the values of fonts are defined explicitly.
 
-=head1 GD METHODS VERSUS GD::SVG METHODS
+=head1 GD FUNCTIONS MISSING FROM GD::SVG
+
+The following GD functions have not yet been incorporated into
+GD::SVG. If you attempt to use one of these functions (and you have
+enabled debug warnings via the new() method), GD::SVG will print a
+warning to STDERR.
+
+  Creating image objects:
+    GD::Image->newPalette([$width,$height])
+    GD::Image->newTrueColor([$width,$height])
+    GD::Image->newFromPng($file, [$truecolor])
+    GD::Image->newFromPngData($data, [$truecolor])
+    GD::Image->newFromJpeg($file, [$truecolor])
+    GD::Image->newFromJpegData($data, [$truecolor])
+    GD::Image->newFromXbm($file)
+    GD::Image->newFromWMP($file)
+    GD::Image->newFromGd($file)
+    GD::Image->newFromGdData($data)
+    GD::Image->newFromGd2($file)
+    GD::Image->newFromGd2Data($data)
+    GD::Image->newFromGd2Part($file,srcX,srcY,width,height)
+    GD::Image->newFromXpm($filename)
+
+  Image methods:
+    $gddata   = $image->gd
+    $gd2data  = $image->gd2
+    $wbmpdata = $image->wbmp([$foreground])
+
+  Color control methods:
+    $image->colorAllocateAlpha
+    $image->colorClosest
+    $image->colorClosestHWB
+    $image->colorExact
+    $image->colorResolve
+    $image->getPixel
+    $image->transparent
+
+  Special Colors:
+    $image->setBrush (supported, with kludge)
+    $image->setStyle
+    gdTiled
+    gdStyled
+    $image->setAntialiased
+    gdAntiAliased
+    $image->setAntiAliasedDontBlend
+
+  Drawing methods:
+    $image->arc
+    $image->dashedLine
+    $image->filledArc
+    $image->fill
+    $image->fillToBorder
+
+  Image copying methods
+    None of the image copying methods are yet supported
+
+  Image transformation methods
+    None of the image transformation methods are yet supported
+
+  Character and string drawing methods
+     $image->stringUp  - incompletely supported - broken
+     $image->charUP
+     $image->stringFT
+
+  Alpha Channels
+    $image->alphaBlending
+    $image->saveAlpha
+
+  Miscellaneous image methods
+    $image->isTrueColor
+    $image->compare($image2)
+    $image->clip
+    $image->boundsSafe
+
+  Polygon methods:
+    $polygon->toPt(x,y)
+    $polygon->bounds
+    $polygon->map
+    $polygon->scale
+    $polygon->trasnform
+
+  GD::Polyline
+    Currently no support for GD::Polyline
+
+  Font methods:
+    $font->nchars
+    $font->offset
+
+=head1 GD VERSUS GD::SVG METHODS
 
 All GD::SVG methods mimic the naming and interface of GD methods.  As
 such, maintenance of GD::SVG follows the development of both GD and
 SVG. Much of the original GD documentation is replicated here for ease
-of use. Subtle differnces in the implementation of these methods
+of use. Subtle differences in the implementation of these methods
 between GD and GD::SVG are discussed below. In particular, the return
 value for some GD::SVG methods differs from its GD counterpart.
 
-=head2 GD Functions Missing From GD::SVG
-
-The following GD functions have not yet been incorporated into
-GD::SVG.
-
-  Creating image objects:
-
-  GD::Image->newPalette([$width,$height])
-  GD::Image->newTrueColor([$width,$height])
-  GD::Image->newFromPng($file, [$truecolor])
-  GD::Image->newFromPngData($data, [$truecolor])
-  GD::Image->newFromJpeg($file, [$truecolor])
-  GD::Image->newFromJpegData($data, [$truecolor])
-  GD::Image->newFromXbm($file)
-  GD::Image->newFromWMP($file)
-  GD::Image->newFromGd($file)
-  GD::Image->newFromGdData($data)
-  GD::Image->newFromGd2($file)
-  GD::Image->newFromGd2Data($data)
-  GD::Image->newFromGd2Part($file,srcX,srcY,width,height)
-  GD::Image->newFromXpm($filename)
-
-  Image methods:
-
-  $gddata   = $image->gd
-  $gd2data  = $image->gd2
-  $wbmpdata = $image->wbmp([$foreground])
-
-=head1 Object Constructors: Creating Images
+=head1 OBJECT CONSTRUCTORS: CREATING IMAGES
 
 GD::SVG currently only supports the creation of image objects via its
 new constructor.  This is in contrast to GD proper which supports the
@@ -1027,15 +1240,17 @@ data.
 
 =over 4
 
-=item $image = GD::SVG::Image->new($height,$width);
+=item $image = GD::SVG::Image->new($height,$width,$debug);
 
 Create a blank GD::SVG image object of the specified dimensions in
 pixels. In turn, this method will create a new SVG object and store it
-internally.
+internally. You can turn on debugging with the GD::SVG specific $debug
+parameter.  This should be boolean true and will cause non-implemented
+methods to print a warning on their status to STDERR.
 
 =back
 
-=head1 GD::SVG::Image Methods
+=head1 GD::SVG::Image METHODS
 
 Once a GD::Image object is created, you can draw with it, copy it, and
 merge two images.  When you are finished manipulating the object, you
@@ -1048,22 +1263,22 @@ GD::SVG implements a single output method, svg()!
 
 =over 4
 
-=item  $svg = $image->svg();
+=item $svg = $image->svg();
 
 This returns the image in SVG format. You may then print it, pipe it
 to an image viewer, or write it to a file handle. For example,
 
-      $svg_data = $image->svg;
-      open (DISPLAY,"| display -") || die;
-      binmode DISPLAY;
-      print DISPLAY $svg_data;
-      close DISPLAY;
+  $svg_data = $image->svg;
+  open (DISPLAY,"| display -") || die;
+  binmode DISPLAY;
+  print DISPLAY $svg_data;
+  close DISPLAY;
 
 if you'd like to return an inline version of the image (instead of a
-full document version complete with the DTD), pass the new method the
+full document version complete with the DTD), pass the svg() method the
 'inline' flag:
 
-      $svg_data = $image->svg(-inline=>'true');
+  $svg_data = $image->svg(-inline=>'true');
 
 Calling the other standard GD image output methods (eg
 jpeg,gd,gd2,png) on a GD::SVG::Image object will cause your script to
@@ -1091,9 +1306,11 @@ compatible with SVG. Simultaneously, it creates and stores internally
 a GD compatible color index for use with GD's color manipulation
 methods.
 
-     returns: "rgb(RED,GREEN,BLUE)"
+  returns: "rgb(RED,GREEN,BLUE)"
 
 =item $index = $image->colorAllocateAlpha
+
+NOT IMPLEMENTED
 
 =item $image->colorDeallocate($index)
 
@@ -1105,22 +1322,32 @@ This returns the index of the color closest in the color table to the
 red green and blue components specified. This method is inherited
 directly from GD.
 
-   Example: $apricot = $myImage->colorClosest(255,200,180);
+  Example: $apricot = $myImage->colorClosest(255,200,180);
+
+NOT IMPLEMENTED
 
 =item $index = $image->colorClosestHWB(red,green,blue)
+
+NOT IMPLEMENTED
 
 =item $index = $image->colorExact(red,green,blue)
 
 Retrieve the color index of an rgb triplet (or -1 if it has yet to be
 allocated).
 
+NOT IMPLEMENTED
+
 =item $index = $image->colorResolve(red,green,blue)
+
+NOT IMPLEMENTED
 
 =item $colors_total = $image->colorsTotal()
 
 Retrieve the total number of colors indexed in the image.
 
 =item $index = $image->getPixel(x,y)
+
+NOT IMPLEMENTED
 
 =item ($red,$green,$blue) = $image->rgb($index)
 
@@ -1141,13 +1368,39 @@ NOT IMPLEMENTED
 GD implements a number of special colors that can be used to achieve
 special effects.  They are constants defined in the GD:: namespace,
 but automatically exported into your namespace when the GD module is
-loaded.
+loaded. GD::SVG offers limited support for these methods.
 
 =over 4
 
-=item $image->setBrush($image)
+=item $image->setBrush($image) (KLUDGE ALERT)
+=item gdBrushed
 
-NOT YET IMPLEMENTED
+In GD, one can draw lines and shapes using a brush pattern.  Brushes
+are just images that you can create and manipulate in the usual way.
+When you draw with them, their contents are used for the color and
+shape of the lines.
+
+To make a brushed line, you must create or load the brush first, then
+assign it to the image using setBrush().  You can then draw in that
+with that brush using the gdBrushed special color.  It's often useful
+to set the background of the brush to transparent so that the
+non-colored parts don't overwrite other parts of your image.
+
+  # Via GD, this is how one would set a Brush
+  $diagonal_brush = new GD::Image(5,5);
+  $white = $diagonal_brush->colorAllocate(255,255,255);
+  $black = $diagonal_brush->colorAllocate(0,0,0);
+  $diagonal_brush->transparent($white);
+  $diagonal_brush->line(0,4,4,0,$black); # NE diagonal
+
+GD::SVG offers limited support for setBrush (and the corresponding
+gdBrushed methods) - currently only in the shapes of squares.
+Internally, GD::SVG extracts the longest dimension of the image using
+the getBounds() method. Next, it extracts the second color set,
+assuming that to be the foreground color. It then re-calls the
+original drawing method with these new values in place of the
+gdBrushed. See the private _distill_gdBrushed method for the internal
+details of this operation.
 
 =item $image->setThickness($thickness)
 
@@ -1157,27 +1410,27 @@ width.
 
 =item $image->setStyle(@colors)
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item gdTiled
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item gdStyled
 
-NOT YET IMPLEMENTED
-
-=item gdAntiAliased
-
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $image->setAntiAliased($color)
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
+
+=item gdAntiAliased
+
+NOT IMPLEMENTED
 
 =item $image->setAntiAliasedDontBlend($color,[$flag])
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =back
 
@@ -1193,26 +1446,29 @@ this by drawing a single dot in the specified color at that position.
 =item $image->line(x1,y1,x2,y2,color,$id);
 
 Draw a line between the two coordinate points with the specified
-color.  Passing an optional id will set the id of that SVG element. GD
-also permits drawing facny lines that are Brushed or Styled.  These
-line elements are not supported in GD::SVG.  Instead, the line will
-simply become black (and a warning will be returned).
+color.  Passing an optional id will set the id of that SVG
+element. GD::SVG also supports drawing with the special brushes -
+gdStyled and gdBrushed - although these special styles are difficult
+to replicate precisley in GD::SVG.
 
 =item $image->dashedLine($x1,$y1,$x2,$y2,$color,$id);
+
+NOT IMPLEMENTED
 
 =item $image->rectangle($x1,$y1,$x2,$y2,$color,$id);
 
 This draws a rectangle with the specified color.  (x1,y1) and (x2,y2)
-are the upper left and lower right corners respectively.  Only real
-colors are supported.
+are the upper left and lower right corners respectively.  You may also
+draw with the special colors gdBrushed and gdStyled.
 
 =item $image->filledRectangle($x1,$y1,$x2,$y2,$color,$id);
 
 filledRectangle is a GD specific method with no direct equivalent in
 SVG.  GD::SVG translates this method into an SVG appropriate method by
 passing the filled color parameter as a named 'filled' parameter to
-SVG.
-  
+SVG. Drawing with the special colors is also permitted. See the
+documentation for the line() method for additional details.
+
    GD call:
      $img->filledRectangle($x1,$y1,$x2,$y2,$color);
   
@@ -1228,39 +1484,39 @@ This draws a polygon with the specified color.  The polygon must be
 created first (see "Polygons" below).  The polygon must have at least
 three vertices.  If the last vertex doesn't close the polygon, the
 method will close it for you.  Both real color indexes and the special
-colors gdBrushed, gdStyled and gdStyledBrushed can be specified.
+colors gdBrushed, gdStyled and gdStyledBrushed can be specified. See
+the documentation for the line() method for additional details.
 
-   Example:
-
-     $poly = new GD::::SVG::Polygon;
-     $poly->addPt(50,0);
-     $poly->addPt(99,99);
-     $poly->addPt(0,99);
-     $image->polygon($poly,$blue);
+  $poly = new GD::::SVG::Polygon;
+  $poly->addPt(50,0);
+  $poly->addPt(99,99);
+  $poly->addPt(0,99);
+  $image->polygon($poly,$blue);
 
 =item $image->filledPolygon($color);
 
-This draws a polygon filled with the specified color.  Only real
-colors are supported under GD::SVG.
+This draws a polygon filled with the specified color.  Drawing with
+the special colors is also permitted. See the documentation for the
+line() method for additional details.
 
-     Example:
+  # make a polygon
+  $poly = new GD::Polygon;
+  $poly->addPt(50,0);
+  $poly->addPt(99,99);
+  $poly->addPt(0,99);
 
-     # make a polygon
-     $poly = new GD::Polygon;
-     $poly->addPt(50,0);
-     $poly->addPt(99,99);
-     $poly->addPt(0,99);
-
-     # draw the polygon, filling it with a color
-     $image->filledPolygon($poly,$peachpuff);
+  # draw the polygon, filling it with a color
+  $image->filledPolygon($poly,$peachpuff);
 
 =item $image->ellipse($cx,$cy,$width,$height,$color)
 =item $image->filledEllipse($cx,$cy,$width,$height,$color)
 
 These methods() draw ellipses. ($cx,$cy) is the center of the arc, and
-($width,$height) specify the ellipse width and height, respec- tively.
+($width,$height) specify the ellipse width and height, respectively.
 filledEllipse() is like ellipse() except that the former produces
-filled versions of the ellipse.
+filled versions of the ellipse. Drawing with the special colors is
+also permitted. See the documentation for the line() method for
+additional details.
 
 =item $image->arc($cy,$cy,$width,$height,$start,$end,$color,$id);
 
@@ -1272,25 +1528,27 @@ top of the ellipse, and angles increase clockwise.  To specify a
 complete ellipse, use 0 and 360 as the starting and ending angles.  To
 draw a circle, use the same value for width and height.
 
-Internally, arc() calls the ellipse() method of SVG.pm. Although GD
-supports drawing with gdBrushed, gdStyled, or gdStyledBrushed, these
-options are not supported by GD::SVG.
+Internally, arc() calls the ellipse() method of SVG.pm. Drawing with
+the special colors is also permitted. See the documentation for the
+line() method for additioanl details.
+
+NOT IMPLEMENTED
 
 =item $image->filledArc();
 
-NOT YET FILLED, BUT SHOULD BE ABLE TO SUPPORT
+NOT IMPLEMENTED
 
 =item $image->fill();
 
-NOT YET IMPLEMENTED BUT SHOULD BE ABLE TO SUPPORT
+NOT IMPLEMENTED
 
 =item $image->fillToBorder()
 
-NOT YET IMPLEMENTED BUT SHOULD BE ABLE TO SUPPORT
+NOT IMPLEMENTED
 
 =back
 
-=head2 Image Copying Commands
+=head2 Image Copying Methods
 
 None of the image copying commands are implemented in GD::SVG.  If
 your script calls one of the following methods, your script will die
@@ -1298,13 +1556,13 @@ remorsefully with a warning.  With sufficient demand, I might try to
 implement some of these methods.  For now, I think that they are
 beyond the intent of GD::SVG.
 
-   $image->copy()
-   $image->clone()
-   $image->copyMerge()
-   $image->copyMergeGray()
-   $image->copyResized()
-   $image->copyResampled()
-   $image->trueColorToPalette()
+  $image->copy()
+  $image->clone()
+  $image->copyMerge()
+  $image->copyMergeGray()
+  $image->copyResized()
+  $image->copyResampled()
+  $image->trueColorToPalette()
 
 =head2 Image Transfomation Commands
 
@@ -1314,16 +1572,16 @@ die remorsefully with a warning.  With sufficient demand, I might try
 to implement some of these methods.  For now, I think that they are
 beyond the intent of GD::SVG.
 
-   $image = $sourceImage->copyRotate90()
-   $image = $sourceImage->copyRotate180()
-   $image = $sourceImage->copyRotate270()
-   $image = $sourceImage->copyFlipHorizontal()
-   $image = $sourceImage->copyFlipVertical()
-   $image = $sourceImage->copyTranspose()
-   $image = $sourceImage->copyReverseTranspose()
-   $image->rotate180()
-   $image->flipHorizontal()
-   $image->flipVertical()
+  $image = $sourceImage->copyRotate90()
+  $image = $sourceImage->copyRotate180()
+  $image = $sourceImage->copyRotate270()
+  $image = $sourceImage->copyFlipHorizontal()
+  $image = $sourceImage->copyFlipVertical()
+  $image = $sourceImage->copyTranspose()
+  $image = $sourceImage->copyReverseTranspose()
+  $image->rotate180()
+  $image->flipHorizontal()
+  $image->flipVertical()
 
 =head2 Character And String Drawing
 
@@ -1353,9 +1611,7 @@ This method draws a string starting at position (x,y) in the speci-
 fied font and color.  Your choices of fonts are gdSmallFont,
 gdMediumBoldFont, gdTinyFont, gdLargeFont and gdGiantFont.
 
-  Example:
-
- $myImage->string(gdSmallFont,2,10,"Peachy Keen",$peach);
+  $myImage->string(gdSmallFont,2,10,"Peachy Keen",$peach);
 
 =item $image->stringUp($font,$x,$y,$string,$color)
 
@@ -1396,10 +1652,10 @@ instead.
 If successful, the method returns an eight-element list giving the
 boundaries of the rendered string:
 
-    @bounds[0,1]  Lower left corner (x,y)
-    @bounds[2,3]  Lower right corner (x,y)
-    @bounds[4,5]  Upper right corner (x,y)
-    @bounds[6,7]  Upper left corner (x,y)
+  @bounds[0,1]  Lower left corner (x,y)
+  @bounds[2,3]  Lower right corner (x,y)
+  @bounds[4,5]  Upper right corner (x,y)
+  @bounds[6,7]  Upper left corner (x,y)
 
 This from the GD documentation (not yet implemented in GD::SVG):
 
@@ -1422,18 +1678,16 @@ The value of charmap is one of "Unicode", "Shift_JIS" and "Big5".  The
 interaction between Perl, Unicode and libgd is not clear to me, and
 you should experiment a bit if you want to use this feature.
 
-  Example:
+  $gd->stringFT($black,'/dosc/windows/Fonts/pala.ttf',40,0,20,90,
+                "hi there\r\nbye now",
+                {linespacing=>0.6,
+                 charmap  => 'Unicode',
+               });
 
-    $gd->stringFT($black,'/dosc/windows/Fonts/pala.ttf',40,0,20,90,
-                  "hi there\r\nbye now",
-                  {linespacing=>0.6,
-                   charmap  => 'Unicode',
-                  });
-
-  For backward compatibility with older versions of the FreeType
-  library, the alias stringTTF() is also recognized.  Also be aware
-  that relative font paths are not recognized due to problems in the
-  libgd library.
+For backward compatibility with older versions of the FreeType
+library, the alias stringTTF() is also recognized.  Also be aware that
+relative font paths are not recognized due to problems in the libgd
+library.
 
 =back
 
@@ -1443,11 +1697,11 @@ you should experiment a bit if you want to use this feature.
 
 =item $image->alphaBlending($blending)
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $image->saveAlpha($saveAlpha)
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =back
 
@@ -1457,7 +1711,7 @@ NOT YET IMPLEMENTED
 
 =item $image->interlaced([$flag])
 
-NOT SUPPORTED
+NOT IMPLEMENTED
 
 =item ($width,$height) = $image->getBounds()
 
@@ -1465,24 +1719,24 @@ getBounds() returns the height and width of the image.
 
 =item $is_truecolor = $image->isTrueColor()
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $flag = $image1->compare($image2)
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $image->clip($x1,$y1,$x2,$y2)
        ($x1,$y1,$x2,$y2) = $image->clip
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $flag = $image->boundsSafe($x,$y)
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =back
 
-=head2 Polygons
+=head1 GD::SVG::Polygon METHODS
 
 SVG is much more adept at creating polygons than GD. That said, GD
 does provide some rudimentary support for polygons but must be created
@@ -1494,61 +1748,61 @@ as seperate objects point by point.
 
 Create an empty polygon with no vertices.
 
-     $poly = new GD::SVG::Polygon;
+  $poly = new GD::SVG::Polygon;
 
 =item $poly->addPt($x,$y)
 
 Add point (x,y) to the polygon.
 
-      $poly->addPt(0,0);
-      $poly->addPt(0,50);
-      $poly->addPt(25,25);
+  $poly->addPt(0,0);
+  $poly->addPt(0,50);
+  $poly->addPt(25,25);
 
 =item ($x,$y) = $poly->getPt($index)
 
 Retrieve the point at the specified vertex.
 
-     ($x,$y) = $poly->getPt(2);
+  ($x,$y) = $poly->getPt(2);
 
 =item $poly->setPt($index,$x,$y)
 
 Change the value of an already existing vertex.  It is an error to set
 a vertex that isn't already defined.
 
-     poly->setPt(2,100,100);
+  $poly->setPt(2,100,100);
 
 =item ($x,$y) = $poly->deletePt($index)
 
-     Delete the specified vertex, returning its value.
+Delete the specified vertex, returning its value.
 
-     ($x,$y) = $poly->deletePt(1);
+  ($x,$y) = $poly->deletePt(1);
 
 =item $poly->toPt($dx,$dy)
 
 Draw from current vertex to a new vertex, using relative (dx,dy)
 coordinates.  If this is the first point, act like addPt().
 
-      $poly->addPt(0,0);
-      $poly->toPt(0,50);
-      $poly->toPt(25,-25);
+  $poly->addPt(0,0);
+  $poly->toPt(0,50);
+  $poly->toPt(25,-25);
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $vertex_count = $poly->length
 
 Return the number of vertices in the polygon.
 
-   $points = $poly->length;
+  $points = $poly->length;
 
 =item @vertices = $poly->vertices
 
 Return a list of all the verticies in the polygon object.  Each mem-
 ber of the list is a reference to an (x,y) array.
 
-      @vertices = $poly->vertices;
-      foreach $v (@vertices)
-          print join(",",@$v),"\n";
-      }
+  @vertices = $poly->vertices;
+  foreach $v (@vertices)
+      print join(",",@$v),"\n";
+  }
 
 =item @rect = $poly->bounds
 
@@ -1556,9 +1810,9 @@ Return the smallest rectangle that completely encloses the polygon.
 The return value is an array containing the (left,top,right,bottom) of
 the rectangle.
 
-      ($left,$top,$right,$bottom) = $poly->bounds;
+  ($left,$top,$right,$bottom) = $poly->bounds;
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $poly->offset($dx,$dy)
 
@@ -1566,7 +1820,7 @@ Offset all the vertices of the polygon by the specified horizontal
 (dh) and vertical (dy) amounts.  Positive numbers move the polygon
 down and to the right. Returns the number of vertices affected.
 
-      $poly->offset(10,30);
+  $poly->offset(10,30);
 
 =item $poly->map($srcL,$srcT,$srcR,$srcB,$destL,$dstT,$dstR,$dstB)
 
@@ -1577,10 +1831,10 @@ destination rectangles are given in (left,top,right,bottom) coordi-
 nates.  For convenience, you can use the polygon's own bounding box as
 the source rectangle.
 
-       # Make the polygon really tall
-       $poly->map($poly->bounds,0,0,50,200);
+  # Make the polygon really tall
+  $poly->map($poly->bounds,0,0,50,200);
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $poly->scale($sx,$sy)
 
@@ -1589,7 +1843,7 @@ sx and sy.  For example scale(2,2) will make the polygon twice as
 large.  For best results, move the center of the polygon to position
 (0,0) before you scale, then move it back to its previous position.
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $poly->transform($sx,$rx,$sy,$ry,$tx,$ty) 
 
@@ -1598,7 +1852,7 @@ sx and sy are the X and Y scaling factors, rx and ry are the X and Y
 rotation factors, and tx and ty are X and Y offsets.  See the Adobe
 PostScript Reference, page 154 for a full explanation, or experiment.
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =back
 
@@ -1607,7 +1861,7 @@ NOT YET IMPLEMENTED
 Please see GD::Polyline for information on creating open polygons and
 splines.
 
-=head2 Font Utilites
+=head1 GD::SVG::Font METHODS
 
 NOTE: The object-oriented implementation to font utilites is not yet
 supported.
@@ -1659,7 +1913,7 @@ This returns the number of characters in the font.
 
   print "The large font contains ",gdLargeFont->nchars," characters\n";
 
-NOT YET IMPLEMENTED
+NOT IMPLEMENTED
 
 =item $font->offset
 
@@ -1674,12 +1928,109 @@ These return the width and height of the font.
 
 =back
 
-=head1 SEE ALSO
+=head1 REAL WORLD EXAMPLES
 
-L<GD>,
-L<SVG>,
-L<SVG::Manual>,
-L<SVG::DOM>
+=over 4
+
+=item BioPerl
+
+The Bio::Graphics package of the BioPerl project makes use of GD::SVG
+to export SVG graphics.
+
+  http://www.bioperl.org/
+
+=item Generic Genome Browser
+
+The Generic Genome Browser (GBrowse) utilizes Bio::Graphics and
+enables SVG dumping of genomics views. You can see a real-world
+example of SVG output from GBrowse at WormBase:
+
+  http://www.wormbase.org/cgi-bin/gbrowse/
+
+Further information about the Generic Genome Browser is available at
+the Generic Model Organism Project home page:
+
+  http://www.gmod.org/
+
+=item toddot
+
+I've also prepared a number of comparative images at my website
+(shameless plug, hehe):
+
+  http://www.toddot.net/projects/GD-SVG/
+
+=back
+
+=head1 INTERNAL METHODS
+
+The following internal methods are private and documented only for
+those wishing to extend the GD::SVG interface.
+
+=over 4
+
+=item _distill_gdBrushed()
+
+When a drawing method is passed a stylized brush via gdBrushed, the
+internal _distill_gdBrushed method attempts to make sense of this by
+setting line thickness and foreground color. Since stylized brushes
+are GD::SVG::Image objects, it does this by fetching the width of the
+image using the getBounds method. This width is then used to
+setThickness.  The last color set by colorAllocate is then used for
+the foreground color.
+
+In setting line thickness, GD::SVG temporarily overrides any
+previously set line thickness.  In GD, setThickness is persistent
+through uses of stylized brushes. To accomodate this behavior,
+_distill_gdBrushed temporarily stores the previous line_thickness in
+the $self->{previous_line_thickness} flag.
+
+=item _reset()
+
+The _reset() method is used to restore persistent drawing settings
+between uses of stylized brushes. Currently, this involves
+  
+  - restoring line thickness
+
+=back
+
+=head1 IMPORTANT NOTE! GD::SVG / SVG::GD
+
+A second module (SVG::GD), written by Ronan Oger also provides similar
+functionality as this module. Ronan and I are concurrently developing
+these modules with an eye towards integrating them in the future. In
+principle, the primary difference is that GD::SVG aims to generate SVG
+and SVG only.  That is, it:
+
+  1. Does not store an internal representation of the GD image
+
+  2. Does not enable JPG, PNG, OR SVG output from a single pass
+     through data
+
+  3. Only occasioanally uses inherited methods from GD
+
+Instead GD::SVG depends on the user to choose which output format they
+would like in advance, "use"ing the appropriate module for that
+output. As described at the start of this document, module selection
+between GD and GD::SVG can be made dynamically using eval statements
+and variables for the differnet classes that GD and GD::SVG create.
+
+There is a second reason for not maintaining a double representation
+of the data in GD and SVG format: SVG documents can quickly become
+very large, especially with large datasets. In cases where scripts are
+primarily generating png images in a server environment and would only
+occasionally need to export SVG, gernerating an SVG image in parallel
+would result in an unacceptable performance hit.
+
+Thus GD::SVG aims to be a plugin for existing configurations that
+depend on GD but would like to take advantage of SVG output.
+
+SVG::GD, on the other hand, aims to tie in the raster-editing ability
+of GD with the power of SVG output. In part, it aims to do this by
+inheriting many methods from GD directly and bringing them into the
+functional space of GD.  This makes SVG::GD easier to set up initially
+(simply by adding the "use SVG::GD" below the "use GD" statement of
+your script. GD::SVG sacrfices this initial eas-of-setup for more
+targeted applications.
 
 =head1 ACKNOWLEDGEMENTS
 
@@ -1688,11 +2039,6 @@ Perl stud. Ronan Oger, author of SVG.pm conceptualized and implemented
 another wrapper around GD at about the exact same time as this module.
 He also provided helpful discussions on implementing GD functions into
 SVG.
-
-=head1 IMPORTANT NOTE! GD::SVG / SVG::GD
-
-A second module (SVG::GD), written by Ronan Oger also provides similar
-functionality as this module.
 
 =head1 AUTHOR
 
@@ -1704,5 +2050,12 @@ Copyright 2003 by Todd Harris and the Cold Spring Harbor Laboratory
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+L<GD>,
+L<SVG>,
+L<SVG::Manual>,
+L<SVG::DOM>
 
 =cut

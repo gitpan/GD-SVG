@@ -7,7 +7,7 @@ my ($image_class,$poly_class,$font_class,$image_type);
 sub BEGIN {
   chomp (my $package = shift);
   $package or die "\nUsage: lots_of_glyphs IMAGE_CLASS
-\t- where IMAGE_CLASS is one of GD or SVG
+\t- where IMAGE_CLASS is one of GD or GD::SVG
 \t- GD generate png output; GD::SVG generates SVG.\n";
   
   if ($package eq 'GD::SVG') {
@@ -39,7 +39,7 @@ my @colors = ($black,$red,$blue,$green,$yellow,$gray,$aqua,$orange);
 
 
 # Make the background transparent (and white)
-$image->transparent($white);
+#$image->transparent($white);
 
 
 $image->string(gdMediumBoldFont,10,10,'Setting pixels...',$black);
@@ -180,15 +180,15 @@ foreach (@starting_positions) {
 $image->setThickness(1);
 
 # Arcs
-$image->string(gdMediumBoldFont,10,610,'Arcs...',$black);
-$color_index = 0;
-@starting_positions = ([290,610],[390,610],[490,610],[590,610],[690,610]);
-foreach (@starting_positions) {
-  my ($x,$y) = @$_;
-  my $color = $colors[$color_index];
-  $image->arc($x,$y,80,25,0,180,$color);
-  $color_index++;
-}
+#$image->string(gdMediumBoldFont,10,610,'Arcs...',$black);
+#$color_index = 0;
+#@starting_positions = ([290,610],[390,610],[490,610],[590,610],[690,610]);
+#foreach (@starting_positions) {
+#  my ($x,$y) = @$_;
+#  my $color = $colors[$color_index];
+#  $image->arc($x,$y,80,25,0,180,$color);
+#  $color_index++;
+#}
 
 # Fonts...
 $image->string(gdMediumBoldFont,10,650,'Fonts',$black);
