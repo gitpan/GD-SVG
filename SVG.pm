@@ -8,8 +8,9 @@ use warnings;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-#$VERSION = sprintf "0.%02d", q$Revision: 1.7 $ =~ /(\d+)/g;
-$VERSION = sprintf "0.%d%d", q$Revision: 1.7 $ =~ /(\d+)/g;
+$VERSION = sprintf "0.%d%d", q$Revision: 1.8 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%02d", q$Revision: 1.8 $ =~ /(\d+)/g;
+
 @ISA = qw(Exporter);
 
 %EXPORT_TAGS = ('cmp'  => [qw(GD_CMP_IMAGE 
@@ -72,8 +73,8 @@ use constant LARGE_HEIGHT       => 16;
 use constant LARGE_WIDTH        => 8;
 use constant LARGE_WEIGHT       => 'normal';
 use constant GIANT_HEIGHT       => 15;
-use constant GIANT_WEIGHT       => 'bold';
 use constant GIANT_WIDTH        => 8;
+use constant GIANT_WEIGHT       => 'bold';
 
 # TEXT_KLUDGE controls the number of pixels to bump text on the
 # Y-axis in order to more closely match GD output.
