@@ -5,7 +5,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 46;
+use Test::More tests => 50;
 BEGIN { use_ok('GD::SVG') };
 
 #########################
@@ -36,8 +36,11 @@ ok($image->rectangle(10,20,20,40,$black),'rectangle ok');
 ok($image->filledRectangle(10,20,20,40,$black),'filledRectangle ok');
 ok($image->ellipse(10,20,20,40,$black),'ellipse ok');
 ok($image->filledEllipse(10,20,20,40,$black),'filledEllipse ok');
-# arc
-# filledArc
+ok($image->arc(10,20,20,40,0,360,$black),'arc (closed) ok');
+ok($image->arc(10,20,20,40,40,360,$black),'arc (open) ok');
+ok($image->filledArc(10,20,20,40,0,360,$black),'filledArc (closed) ok');
+ok($image->filledArc(10,20,20,40,100,360,$black),'filledArc (open) ok');
+
 # fill
 # fillToBorder
 

@@ -1,5 +1,11 @@
 Revision history for Perl extension GD::SVG.
 
+0.21  Sat Nov 29 14:54:54 2003
+	- added support for both open and closed arcs generated
+	- added support for $polygon->bounds();
+	- updated test script
+	- finally squashed the line thickness bug
+
 0.20  Wed Nov 26 08:51:13 2003
 	- fixed a bug in the resetting of line thickness 
           after using gdBrushed
@@ -19,3 +25,6 @@ Revision history for Perl extension GD::SVG.
 	- original version; created by h2xs 1.22 with options
 		-AX -n GD::SVG
 
+--
+
+April - October 2003 GD::SVG developed as GD2SVG

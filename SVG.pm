@@ -8,9 +8,9 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-#$VERSION = sprintf "0.%d%d", q$Revision: 1.20 $ =~ /(\d+)/g;
-#$VERSION = sprintf "0.%02d", q$Revision: 1.20 $ =~ /(\d+)/g;
-$VERSION = sprintf "0.%d", q$Revision: 1.20 $ =~ /\d\.(\d+)/g;
+#$VERSION = sprintf "0.%d%d", q$Revision: 1.21 $ =~ /(\d+)/g;
+#$VERSION = sprintf "0.%02d", q$Revision: 1.21 $ =~ /(\d+)/g;
+$VERSION = sprintf "0.%d", q$Revision: 1.21 $ =~ /\d\.(\d+)/g;
 
 @ISA = qw(Exporter);
 %EXPORT_TAGS = ('cmp'  => [qw(GD_CMP_IMAGE 
@@ -99,6 +99,66 @@ sub GD::SVG::Image::_error {
   warn "GD method $method is not implemented in GD::SVG" if ($self->{debug} > 0);
 }
 
+
+#########################
+# GD Constants
+#########################
+# Kludge - use precalculated values of cos(theta) and sin(theta)
+# so that I do no have to examine quadrants
+
+my @cosT = (qw/1024 1023 1023 1022 1021 1020 1018 1016 1014 1011 1008
+1005 1001 997 993 989 984 979 973 968 962 955 949 942 935 928 920 912
+904 895 886 877 868 858 848 838 828 817 806 795 784 772 760 748 736
+724 711 698 685 671 658 644 630 616 601 587 572 557 542 527 512 496
+480 464 448 432 416 400 383 366 350 333 316 299 282 265 247 230 212
+195 177 160 142 124 107 89 71 53 35 17 0 -17 -35 -53 -71 -89 -107 -124
+-142 -160 -177 -195 -212 -230 -247 -265 -282 -299 -316 -333 -350 -366
+-383 -400 -416 -432 -448 -464 -480 -496 -512 -527 -542 -557 -572 -587
+-601 -616 -630 -644 -658 -671 -685 -698 -711 -724 -736 -748 -760 -772
+-784 -795 -806 -817 -828 -838 -848 -858 -868 -877 -886 -895 -904 -912
+-920 -928 -935 -942 -949 -955 -962 -968 -973 -979 -984 -989 -993 -997
+-1001 -1005 -1008 -1011 -1014 -1016 -1018 -1020 -1021 -1022 -1023
+-1023 -1024 -1023 -1023 -1022 -1021 -1020 -1018 -1016 -1014 -1011
+-1008 -1005 -1001 -997 -993 -989 -984 -979 -973 -968 -962 -955 -949
+-942 -935 -928 -920 -912 -904 -895 -886 -877 -868 -858 -848 -838 -828
+-817 -806 -795 -784 -772 -760 -748 -736 -724 -711 -698 -685 -671 -658
+-644 -630 -616 -601 -587 -572 -557 -542 -527 -512 -496 -480 -464 -448
+-432 -416 -400 -383 -366 -350 -333 -316 -299 -282 -265 -247 -230 -212
+-195 -177 -160 -142 -124 -107 -89 -71 -53 -35 -17 0 17 35 53 71 89 107
+124 142 160 177 195 212 230 247 265 282 299 316 333 350 366 383 400
+416 432 448 464 480 496 512 527 542 557 572 587 601 616 630 644 658
+671 685 698 711 724 736 748 760 772 784 795 806 817 828 838 848 858
+868 877 886 895 904 912 920 928 935 942 949 955 962 968 973 979 984
+989 993 997 1001 1005 1008 1011 1014 1016 1018 1020 1021 1022 1023
+1023/);
+
+my @sinT = (qw/0 17 35 53 71 89 107 124 142 160 177 195 212 230 247
+265 282 299 316 333 350 366 383 400 416 432 448 464 480 496 512 527
+542 557 572 587 601 616 630 644 658 671 685 698 711 724 736 748 760
+772 784 795 806 817 828 838 848 858 868 877 886 895 904 912 920 928
+935 942 949 955 962 968 973 979 984 989 993 997 1001 1005 1008 1011
+1014 1016 1018 1020 1021 1022 1023 1023 1024 1023 1023 1022 1021 1020
+1018 1016 1014 1011 1008 1005 1001 997 993 989 984 979 973 968 962 955
+949 942 935 928 920 912 904 895 886 877 868 858 848 838 828 817 806
+795 784 772 760 748 736 724 711 698 685 671 658 644 630 616 601 587
+572 557 542 527 512 496 480 464 448 432 416 400 383 366 350 333 316
+299 282 265 247 230 212 195 177 160 142 124 107 89 71 53 35 17 0 -17
+-35 -53 -71 -89 -107 -124 -142 -160 -177 -195 -212 -230 -247 -265 -282
+-299 -316 -333 -350 -366 -383 -400 -416 -432 -448 -464 -480 -496 -512
+-527 -542 -557 -572 -587 -601 -616 -630 -644 -658 -671 -685 -698 -711
+-724 -736 -748 -760 -772 -784 -795 -806 -817 -828 -838 -848 -858 -868
+-877 -886 -895 -904 -912 -920 -928 -935 -942 -949 -955 -962 -968 -973
+-979 -984 -989 -993 -997 -1001 -1005 -1008 -1011 -1014 -1016 -1018
+-1020 -1021 -1022 -1023 -1023 -1024 -1023 -1023 -1022 -1021 -1020
+-1018 -1016 -1014 -1011 -1008 -1005 -1001 -997 -993 -989 -984 -979
+-973 -968 -962 -955 -949 -942 -935 -928 -920 -912 -904 -895 -886 -877
+-868 -858 -848 -838 -828 -817 -806 -795 -784 -772 -760 -748 -736 -724
+-711 -698 -685 -671 -658 -644 -630 -616 -601 -587 -572 -557 -542 -527
+-512 -496 -480 -464 -448 -432 -416 -400 -383 -366 -350 -333 -316 -299
+-282 -265 -247 -230 -212 -195 -177 -160 -142 -124 -107 -89 -71 -53 -35
+-17 /);
+
+
 #############################
 # GD::SVG::Image methods
 #############################
@@ -112,7 +172,7 @@ sub GD::SVG::Image::new {
 
   # Let's create an internal representation of the image in GD
   # so that I can easily use some of GD's methods
-  $this->{internal_gd} = GD::Image->new($width,$height);
+  $this->{gd} = GD::Image->new($width,$height);
 
   # Let's just assume that we always want the foreground color to be
   # black This, for the most part, works for Bio::Graphics This
@@ -133,6 +193,16 @@ sub GD::SVG::Image::svg {
                -inline => 1);
 }
 
+###sub GD::SVG::Image::png {
+###  my ($self,$compression) = @_;
+###  return $self->{gd}->png($compression);
+###}
+
+###sub GD::SVG::Image::jpeg {
+###  my ($self,$quality) = @_;
+###  return $self->{gd}->jpeg($quality);
+###}
+
 #############################
 # Color management routines #
 #############################
@@ -142,11 +212,9 @@ sub GD::SVG::Image::colorAllocate {
   $g ||= 0;
   $b ||= 0;
   my $color = "rgb($r,$g,$b)";
-  my $gd = _internal_gd($self);
-  my $index = $gd->colorAllocate($r,$g,$b);
+  my $index = $self->{gd}->colorAllocate($r,$g,$b);
 
   # This storage of colors is redundant and needs to be cleaned up
-
   # Save GDs color_index, keyed by the RGB triplet that SVG utilizes.
   # As well as the raw rgb triplet...
   $self->{color_index}->{$color} = [$index,$r,$g,$b];
@@ -155,21 +223,24 @@ sub GD::SVG::Image::colorAllocate {
   return $color;
 }
 
-sub GD::SVG::Image::colorAllocateAlpha { shift->_error('colorAllocateAlpha'); }
+sub GD::SVG::Image::colorAllocateAlpha {
+  my ($self,$r,$g,$b,$alpha) = @_;
+  ### $self->{gd}->colorAllocateAlpha($r,$g,$b,$alpha);
+  $self->_error('colorAllocateAlpha');
+}
 
 sub GD::SVG::Image::colorDeallocate {
   my ($self,$index) = @_;
   my $colors = %{$self->{color_index}};
-  my $gd = _internal_gd($self);
-  $gd->colorDeallocate($index);
   delete $colors->{$index};
+  ### $self->{gd}->colorDeallocate($index);
 }
 
 # workaround for bad GD
-#sub colorClosest {
-# NOT YET IMPLEMENTED
 sub GD::SVG::Image::colorClosest {
-  my ($self,$gd,@c) = @_;
+  my ($self,@c) = @_;
+  ### my $index = $self->{gd}->colorClosest(@c);
+
   # Let's just return the color for now.
   # Terrible kludge.
   my $color = $self->colorAllocate(@c);
@@ -190,6 +261,9 @@ sub GD::SVG::Image::colorClosestHWB { shift->_error('colorClosestHWB'); }
 
 sub GD::SVG::Image::colorExact {
   my ($self,$r,$g,$b) = @_;
+  ### my $index = $self->{gd}->colorExact($r,$g,$b);
+  
+  # Let's just allocate the color instead of looking it up
   my $color = $self->colorAllocate($r,$g,$b);
   if ($color) {
     return $color;
@@ -198,21 +272,29 @@ sub GD::SVG::Image::colorExact {
   }
 }
 
-sub GD::SVG::Image::colorResolve    { shift->_error('colorResolve'); }
+sub GD::SVG::Image::colorResolve {
+  my ($self,$r,$g,$b) = @_;
+  ### my $index = $self->{gd}->colorResolve($r,$g,$b);
+  my $color = $self->colorAllocate($r,$g,$b);
+  return $color;
+}
 
 sub GD::SVG::Image::colorsTotal {
   my $self = shift;
-  my $gd = _internal_gd($self);
-  return $gd->colorsTotal;
+  return $self->{gd}->colorsTotal;
 }
 
 
 # NOT YET IMPLEMENTED
 sub GD::SVG::Image::getPixel {
   my ($self,$x,$y) = @_;
+  # Internal GD - probbaly unnecessary in this context...
+  # Will contstruct appropriate return value later
+  #  $self->{gd}->getPixel($x,$y);
+  
   # I don't have any cogent way to fetch the value of an asigned pixel
   # without calculating all positions and loading into memory.
-
+  
   # For these purposes, I could maybe just look it up...  From a hash
   # table or something - Keep track of all assigned pixels and their
   # color...
@@ -250,6 +332,8 @@ sub GD::SVG::Image::transparent { shift->_error('transparent'); }
 # color added is intended to be the foreground color.
 sub GD::SVG::Image::setBrush {
   my ($self,$pen) = @_;
+  ### $self->{gd}->setBrush($pen);
+
   my ($width,$height) = $pen->getBounds();
   my $last_color = $pen->{colors_added}->[-1];
   my ($r,$g,$b) = $self->rgb($last_color);
@@ -263,6 +347,7 @@ sub GD::SVG::Image::setBrush {
 # color.
 sub GD::SVG::Image::setStyle {
   my ($self,@params) = @_;
+  ### $self->{gd}->setStyle(@params);
   $self->{current_style} = [ @params ];
   return;
 }
@@ -273,7 +358,9 @@ sub GD::SVG::Image::setStyle {
 # Each method should check the thickness of the line...
 sub GD::SVG::Image::setThickness {
   my ($self,$thickness) = @_;
+  ### $self->{gd}->setThickness($thickness);
   $self->{line_thickness} = $thickness;
+  # $self->{prev_line_thickness} = (!defined $self->{prev_line_thickness}) ? $thickness : undef;
 }
 
 
@@ -308,6 +395,8 @@ sub GD::SVG::Image::setAntiAliasedDontBlend { shift->_error('setAntiAliasedDontB
 #######################
 sub GD::SVG::Image::setPixel {
   my ($self,$x1,$y1,$color,$color2) = @_;
+  ### $self->{gd}->setPixel($x1,$y1,$color);
+
   my $img = $self->{img};
   my $id = $self->_create_id($x1,$y1);
   my $result =
@@ -333,6 +422,7 @@ sub GD::SVG::Image::line {
     my $fg = $self->_distill_gdBrushed($color);
     $self->line($x1,$y1,$x2,$y2,$fg);
   } else {
+    ### $self->{gd}->line($x1,$y1,$x2,$y2,$color);
     my $img = $self->{img};
     my $id = $self->_create_id($x1,$y1);
     my $thickness = $self->_get_thickness() || 1;
@@ -355,21 +445,22 @@ sub GD::SVG::Image::line {
 
 sub GD::SVG::Image::dashedLine { shift->_error('dashedLine'); }
 
+# The fill parameter is used internally as a simplification...
 sub GD::SVG::Image::rectangle {
-  my ($self,$x1,$y1,$x2,$y2,$color) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
+  my ($self,$x1,$y1,$x2,$y2,$color,$fill) = @_;
   if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
     my $fg = $self->_distill_gdBrushed($color);
-    $self->rectangle($x1,$y1,$x2,$y2,$fg);
+    $self->rectangle($x1,$y1,$x2,$y2,$fg,$fill);
   } else {
+    ### $self->{gd}->rectangle($x1,$y1,$x2,$y2,$color);
     my $img = $self->{img};
     my $id = $self->_create_id($x1,$y1);
     my $foreground = $self->{foreground};
     my $fg = ($color eq $foreground) ? $foreground : $color;
     my $thickness = $self->_get_thickness() || 1;
+
+    my $fill_opacity = ($fill) ? 1 : 0;
+    $fill ||= 'none';
     my $result = 
       $img->rectangle(x=>$x1,y=>$y1,
 		      width  =>$x2-$x1,
@@ -379,7 +470,8 @@ sub GD::SVG::Image::rectangle {
 				 'stroke'         => $color,
 				 'stroke-width'   => $thickness,
 				 'stroke-opacity' => '1',
-				 'fill-opacity'   => '0'
+				 'fill-opacity'   => $fill_opacity,
+				 'fill'           => $fill,
 				}
 		     );
     $self->_reset();
@@ -387,71 +479,43 @@ sub GD::SVG::Image::rectangle {
   }
 }
 
-# This is EXACTLY the same as the rectangle method above
-# I should just use it but pass a flag for the fill opacity
+# This should just call the rectangle method passing it a flag.
+# I will need to fix the glyph that bypasses this option...
 sub GD::SVG::Image::filledRectangle {
   my ($self,$x1,$y1,$x2,$y2,$color) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
-  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
-    my $fg = $self->_distill_gdBrushed($color);
-    $self->filledRectangle($x1,$y1,$x2,$y2,$fg);
-  } else {
-    my $img = $self->{img};
-    my $id = $self->_create_id($x1,$y1);
-    my $thickness = $self->_get_thickness() || 1;
-    my $result =
-      $img->rectangle(x=>$x1,y=>$y1,
-		      width  =>$x2-$x1,
-		      height =>$y2-$y1,
-		      id     =>$id,
-		      style  => {
-				 #stroke =>$self->{foreground},
-				 stroke =>$color,
-				 'stroke-width' => $thickness,
-				 fill   =>$color,
-				 # 'stroke-opacity' => '0',
-				 # 'fill-opacity'   => '0'
-				}
-		     );
-    $self->_reset();
-    return $result;
-  }
+  # Call the rectangle method passing the fill color
+  $self->rectangle($x1,$y1,$x2,$y2,$color,$color);
 }
 
 sub GD::SVG::Image::polygon {
-  my ($self,$poly,$color) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
+  my ($self,$poly,$color,$fill) = @_;
   if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
     my $fg = $self->_distill_gdBrushed($color);
     $self->polygon($poly,$fg);
   } else {
+    ### $self->{gd}->polygon($poly,$color);
     my $img = $self->{img};
-    
     # Create seperate x and y arrays of vertices
-    my @xpoints = $poly->fetch_vertices('x');
-    my @ypoints = $poly->fetch_vertices('y');
+    my @xpoints = $poly->_fetch_vertices('x');
+    my @ypoints = $poly->_fetch_vertices('y');
     my $points = $img->get_path(
 				x=>\@xpoints, y=>\@ypoints,
 				-type=>'polygon'
 			       );
     my $id = $self->_create_id($xpoints[0],$ypoints[0]);
     my $thickness = $self->_get_thickness() || 1;
+    my $fill_opacity = ($fill) ? 1 : 0;
+    $fill ||= 'none';
     my $result =
       $img->polygon(
 		    %$points,
 		    id=>$id,
 		    style=>{
-			    'stroke'=>$color,
-			    'stroke-opacity'=>'1.0',
-			    'stroke-width' => $thickness,			
-			    'fill'=>$color,
-			    'fill-opacity'=>'0'
+			    'stroke'        => $color,
+			    'stroke-opacity'=> '1.0',
+			    'stroke-width'  => $thickness,			
+			    'fill'          => $fill,
+			    'fill-opacity'  => $fill_opacity,
 			   }
 		   );
     $self->_reset();
@@ -462,67 +526,36 @@ sub GD::SVG::Image::polygon {
 # Passing the stroke doesn't really work as expected...
 sub GD::SVG::Image::filledPolygon {
   my ($self,$poly,$color,$stroke) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
-  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
-    my $fg = $self->_distill_gdBrushed($color);
-    $self->filledPolygon($poly,$fg,$stroke);
-  } else {
-    my $img = $self->{img};
-    # Create seperate x and y arrays of vertices
-    my @xpoints = $poly->fetch_vertices('x');
-    my @ypoints = $poly->fetch_vertices('y');
-    my $points = $img->get_path(
-				x=>\@xpoints, y=>\@ypoints,
-				-type=>'polygon'
-			       );
-    my $id = $self->_create_id($xpoints[0],$ypoints[0]);
-    my $thickness = $self->_get_thickness() || 1;
-    my $result =
-      $img->polygon(
-		    %$points,
-		    id=>$id,
-		    style=>{
-			    'stroke'=>$stroke,
-			    'stroke-opacity'=>'1.0',
-			    'stroke-width' => $thickness,			
-			    'fill'=>$color,
-			    'fill-opacity'=>'1.0'
-			   }
-		   );
-    $self->_reset();
-    return $result;
-  }
+  my $result = $self->polygon($poly,$color,$color);
+  return $result;
 }
 
 sub GD::SVG::Image::ellipse {
-  my ($self,$x1,$y1,$width,$height,$color) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
+  my ($self,$x1,$y1,$width,$height,$color,$fill) = @_;
   if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
     my $fg = $self->_distill_gdBrushed($color);
     $self->ellipse($x1,$y1,$width,$height,$fg);
   } else {
+    ### $self->{gd}->ellipse($x1,$y1,$width,$height,$color);
     my $img = $self->{img};
     my $id = $self->_create_id($x1,$y1);
     # GD uses width and height - SVG uses radii...
     $width  = $width / 2;
     $height = $height / 2;
     my $thickness = $self->_get_thickness() || 1;
+    my $fill_opacity = ($fill) ? '1' : '0';
+    $fill ||= 'none';
     my $result =
       $img->ellipse(
 		    cx=>$x1, cy=>$y1,
 		    rx=>$width, ry=>$height,
 		    id=>$id,
 		    style=>{
-			    'stroke'=>$color,
-			    'stroke-width' => $thickness,
+			    'stroke'        =>$color,
+			    'stroke-width'  => $thickness,
 			    'stroke-opacity'=>'1.0',
-			    'fill-opacity'=>'0'
+			    'fill'          => $fill,
+			    'fill-opacity'  =>$fill_opacity,
 			   }
 		   );
     $self->_reset();
@@ -532,77 +565,87 @@ sub GD::SVG::Image::ellipse {
 
 sub GD::SVG::Image::filledEllipse {
   my ($self,$x1,$y1,$width,$height,$color) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
-  if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
-    my $fg = $self->_distill_gdBrushed($color);
-    $self->filledEllipse($x1,$y1,$width,$height,$fg);
-  } else {
-    my $img = $self->{img};
-    my $id = $self->_create_id($x1,$y1);
-    # GD uses width and height - SVG uses radii...
-    $width  = $width / 2;
-    $height = $height / 2;
-    my $thickness = $self->_get_thickness() || 1;
-    my $result =
-      $img->ellipse(
-		    cx=>$x1, cy=>$y1,
-		    rx=>$width, ry=>$height,
-		    id=>$id,
-		    style=>{
-			    'stroke'=>$color,
-			    'stroke-width' => $thickness,
-			    'stroke-opacity'=>'1.0',
-			    'fill'=>$color,
-			    'fill-opacity'=>'1.0'
-			   }
-		   );
-    $self->_reset();
-    return $result;
-  }
+  my $result = $self->ellipse($x1,$y1,$width,$height,$color,$color);
+  return $result;
 }
 
-
-# I cannot easily create arcs via SVG.pm...
-# Can i pass parameters anonymously?
-
-# the arc method calls SVGs elipse method
-# Can this method create ellipses as well?
+# GD uses the arc() and filledArc() methods in two capacities
+#   1. to create closed ellipses, where start and end are 0 and 360
+#   2. to create honest-to-god open arcs
 sub GD::SVG::Image::arc {
-  my ($self,$x1,$y1,$width,$height,$start,$end,$color) = @_;
-  # Are we trying to draw with a styled line (ie gdStyled, gdBrushed?)
-  # If so, we need to deconstruct the values for line thickness and
-  # foreground color
-  # This needs to be generalized for gdStyled as well
+  my ($self,$cx,$cy,$width,$height,$start,$end,$color,$fill) = @_;
   if ($color eq 'gdStyled' || $color eq 'gdBrushed') {
     my $fg = $self->_distill_gdBrushed($color);
-    $self->arc($x1,$y1,$width,$height,$start,$end,$fg);
+    $self->arc($cx,$cy,$width,$height,$start,$end,$fg);
   } else {
-    my $img = $self->{img};
-    my $id = $self->_create_id($x1,$y1);
-    # GD uses width and height - SVG uses radii...
-    $width  = $width  / 2;
-    $height = $height / 2;
-    
-    # This needs to create two ellipses based on the start and end
-    # and then transform them to bring out the arc...
-    my $thickness = $self->_get_thickness() || 1;
-    my $result =
-      $img->path('x'=>$x1,'y'=>$y1,'rx'=>$width,'ry'=>$height,
-		 style=>{
-			 'stroke'=>$color,
-			 'stroke-width'=> $thickness,
-			 'fill'=>$color,
-			}
-		);
+    ### $self->{gd}->arc($x,$y,$width,$height,$start,$end,$color);
+    # Are we just trying to draw a closed arc (an ellipse)?
+    my $result;
+    if ($start eq '0' and $end eq '360') {
+      $result = $self->ellipse($cx,$cy,$width,$height,$color,$fill);
+    } else {
+      my $img = $self->{img};
+      my $id = $self->_create_id($cx,$cy);
+      my $thickness = $self->_get_thickness() || 1;
+
+      # Taking a stab at drawing elliptical arcs
+      # GD uses diameters, SVG uses radii
+      my $a = $width  / 2;
+      my $b = $height / 2;
+
+      while ($start < 0 )    { $start += 360; }
+      while ($end < 0 )      { $end   += 360; }
+      while ($end < $start ) { $end   += 360; }
+      my ($startx,$starty) = _calculate_arc_coords($cx,$cy,$width,$height,$start);
+      my ($endx,$endy)     = _calculate_arc_coords($cx,$cy,$width,$height,$end);
+
+      # M = move to (origin of the curve)
+      # my $rotation = abs $start - $end;
+      my $large = (abs $start - $end > 180) ? 1 : 0;
+      # my $sweep = ($start > $end) ? 0 : 1;  # directionality of the arc, + CW, - CCW
+      my $sweep = 1; # Always CW with GD
+      my $fill_opacity = ($fill) ? 1 : 0;
+      $fill ||= 'none';
+      $result =
+      	$img->path('d'=>"M$startx,$starty "  .
+      		   "A$a,$b 0 $large,$sweep $endx,$endy",
+		   style=>{
+			   'stroke'      => $color,
+			   'stroke-width'=> $thickness,
+			   'fill'        => $fill,
+			   'fill-opacity'=> $fill_opacity,
+			  },
+		  );
+
+      # Now I need to draw a filled triangle to complete the filledArc
+      if ($fill ne 'none') {
+	my $poly = GD::SVG::Polygon->new();
+	$poly->addPt($cx,$cy);
+	$poly->addPt($startx,$starty);
+	$poly->addPt($endx,$endy);
+	$self->filledPolygon($poly,$color);
+      }
+    }
     $self->_reset();
     return $result;
   }
 }
 
-sub GD::SVG::Image::filledArc    { shift->_error('filledArc'); }
+# Return the x and y positions of start and stop of arcs.
+sub _calculate_arc_coords {
+  my ($cx,$cy,$width,$height,$angle) = @_;
+  my $x = ( $cosT[$angle % 360] * $width)  / (2 * 1024) + $cx;
+  my $y = ( $sinT[$angle % 360] * $height) / (2 * 1024) + $cy;
+  return ($x,$y);
+}
+
+# filledArc needs to attach a filled triangle to the filledArc in
+# order to complete it
+sub GD::SVG::Image::filledArc {
+  my ($self,$cx,$cy,$width,$height,$start,$end,$color) = @_;
+  my $result = $self->arc($cx,$cy,$width,$height,$start,$end,$color,$color);
+  return $result;
+}
 
 # Flood fill that stops at first pixel of a different color.
 sub GD::SVG::Image::fill         { shift->_error('fill'); }
@@ -636,7 +679,7 @@ sub GD::SVG::Image::string {
 	       y=>$y + $font_obj->{height} - TEXT_KLUDGE,
 	       %$formatting,
 	       transform => $transform,
-	       'fill'=>$color,
+	       'fill'    =>$color,
 	      )->cdata($text);
   return $result;
 }
@@ -751,7 +794,7 @@ sub GD::SVG::Image::_create_id {
 sub GD::SVG::Image::_distill_gdBrushed {
   my ($self,$type) = @_;
   # Save the previous line thickness so I can restore after drawing...
-  $self->{prev_line_thickness} = $self->_get_thickness();
+  $self->{prev_line_thickness} = $self->_get_thickness() || 1;
   my $thickness = $self->{$type}->{thickness};
   my $fg = $self->{$type}->{fg};
   $self->setThickness($thickness);
@@ -762,7 +805,8 @@ sub GD::SVG::Image::_distill_gdBrushed {
 # Reset presistent drawing settings between uses of stylized brushes
 sub GD::SVG::Image::_reset {
   my $self = shift;
-  $self->{line_thickness} = $self->{prev_line_thickness};
+  $self->{line_thickness} = $self->{prev_line_thickness} || $self->{line_thickness};
+  $self->{prev_line_thickness} = undef;
 }
 
 # SVG needs some self-awareness so that post-drawing operations can
@@ -784,7 +828,7 @@ sub _save {
 sub GD::SVG::Image::_get_thickness {  return shift->{line_thickness} }
 
 # return the internal GD object
-sub _internal_gd { return shift->{internal_gd} }
+sub _gd { return shift->{gd} }
 
 
 1;
@@ -861,7 +905,8 @@ sub vertices {
   return @vertices;
 }
 
-sub fetch_vertices {
+# return an array of x or y vertices...
+sub _fetch_vertices {
   my ($poly,$flag) = @_;
   my @vertices = $poly->vertices;
   my $axis = ($flag eq 'x') ? 0 : 1;
@@ -872,7 +917,19 @@ sub fetch_vertices {
   return @points;
 }
 
-sub bounds    { _error('GD::SVG::Polygon::bounds'); }
+sub bounds {
+  my $self = shift;
+  my @vertices = $self->vertices;
+  my @x = $self->_fetch_vertices('x');
+  my @y = $self->_fetch_vertices('y');
+  @x = sort { $a <=> $b } @x;
+  @y = sort { $a <=> $b } @y;
+  my $left   = $x[0];
+  my $right  = $x[-1];
+  my $top    = $y[-1];
+  my $bottom = $y[0];
+  return ($left,$top,$right,$bottom);
+}
 
 sub offset {
   my ($self,$dx,$dy) = @_;
@@ -1076,6 +1133,8 @@ module, libgd and its dependencies.
 
 =head1 GENERAL DIFFICULTIES IN TRANSLATING GD TO SVG
 
+These are the primary weaknesses of GD::SVG.
+
 =over 4
 
 =item SVG requires unique identifiers for each element
@@ -1086,18 +1145,35 @@ numbers.  In addition to the typical parameters for GD methods,
 GD::SVG methods allow a user to pass an optional id parameter for
 naming the object.
 
-Several functions also enable a user to pass a unique name
-and number. See the documentation for specific methods below.
-
 =item Direct calls to the GD package will fail
 
-If you use syntax like GD::Image->new in your scripts, these calls
-will fail unless you change the module name to GD::SVG::Image->new().
+You must change direct calls to the classes that GD invokes:
+    GD::Image->new() should be changed to GD::SVG::Image->new()
 
-=item "Pan" methods may behave differently
+See the documentation above for how to dynamically switch between
+packages.
 
-GD "pan" methods like "rectangle" may behave slightly differently in
-GD::SVG due to underlying differences in how such objects are created.
+=item raster fill() and fillToBorder() not supported
+
+As SVG documents are not inherently aware of their canvas, the flood
+fill methods are not currently supported.n
+
+=item getPixel() not supported.
+
+Although setPixel() works as expected, its counterpart getPixel() is
+not supported. I plan to support this method in a future release.
+
+=item arc() and filledArc() partially supported
+
+Currently, GD::SVG supports the drawing of closed (ie full 360 degree
+arcs) and open arcs, but does not support the special arc styling
+methods such as gdChord and gdArc.
+
+=item Images can only be created dynamically, not from pre-existing images
+
+GD::SVG does not currently support the newFrom()
+methods. Consequently, it can only be used for the dynamic creation of
+images.
 
 =item No support for generation of images from filehandles or raw data
 
@@ -1118,6 +1194,9 @@ warned. See the documentation sections for the methods that set these
 options (setStyle(), setBrush(), and setTransparent()).
 
 =back
+
+See below for a full list of methods that have not yet been
+implemented.
 
 =head1 WHEN THINGS GO WRONG
 
@@ -1167,13 +1246,11 @@ warning to STDERR.
     $image->colorAllocateAlpha()
     $image->colorClosest()
     $image->colorClosestHWB()
-    $image->colorExact()
-    $image->colorResolve()
     $image->getPixel()
     $image->transparent()
 
   Special Colors:
-    $image->setBrush() (supported, with kludge)
+    $image->setBrush() (semi-supported, with kludge)
     $image->setStyle()
     gdTiled
     gdStyled
@@ -1182,8 +1259,6 @@ warning to STDERR.
     $image->setAntiAliasedDontBlend()
 
   Drawing methods:
-    $image->arc()
-    $image->filledArc()
     $image->dashedLine()
     $image->fill()
     $image->fillToBorder()
@@ -1374,6 +1449,7 @@ loaded. GD::SVG offers limited support for these methods.
 =over 4
 
 =item $image->setBrush($brush) (KLUDGE ALERT)
+
 =item gdBrushed
 
 In GD, one can draw lines and shapes using a brush pattern.  Brushes
@@ -1444,7 +1520,7 @@ NOT IMPLEMENTED
 Set the corresponding pixel to the given color.  GD::SVG implements
 this by drawing a single dot in the specified color at that position.
 
-=item $image->line(x1,y1,x2,y2,color,$id);
+=item $image->line(x1,y1,x2,y2,color);
 
 Draw a line between the two coordinate points with the specified
 color.  Passing an optional id will set the id of that SVG
@@ -1452,17 +1528,17 @@ element. GD::SVG also supports drawing with the special brushes -
 gdStyled and gdBrushed - although these special styles are difficult
 to replicate precisley in GD::SVG.
 
-=item $image->dashedLine($x1,$y1,$x2,$y2,$color,$id);
+=item $image->dashedLine($x1,$y1,$x2,$y2,$color);
 
 NOT IMPLEMENTED
 
-=item $image->rectangle($x1,$y1,$x2,$y2,$color,$id);
+=item $image->rectangle($x1,$y1,$x2,$y2,$color);
 
 This draws a rectangle with the specified color.  (x1,y1) and (x2,y2)
 are the upper left and lower right corners respectively.  You may also
 draw with the special colors gdBrushed and gdStyled.
 
-=item $image->filledRectangle($x1,$y1,$x2,$y2,$color,$id);
+=item $image->filledRectangle($x1,$y1,$x2,$y2,$color);
 
 filledRectangle is a GD specific method with no direct equivalent in
 SVG.  GD::SVG translates this method into an SVG appropriate method by
@@ -1494,7 +1570,7 @@ the documentation for the line() method for additional details.
   $poly->addPt(0,99);
   $image->polygon($poly,$blue);
 
-=item $image->filledPolygon($color);
+=item $image->filledPolygon($polygon,$color);
 
 This draws a polygon filled with the specified color.  Drawing with
 the special colors is also permitted. See the documentation for the
@@ -1510,6 +1586,7 @@ line() method for additional details.
   $image->filledPolygon($poly,$peachpuff);
 
 =item $image->ellipse($cx,$cy,$width,$height,$color)
+
 =item $image->filledEllipse($cx,$cy,$width,$height,$color)
 
 These methods() draw ellipses. ($cx,$cy) is the center of the arc, and
@@ -1519,7 +1596,7 @@ filled versions of the ellipse. Drawing with the special colors is
 also permitted. See the documentation for the line() method for
 additional details.
 
-=item $image->arc($cy,$cy,$width,$height,$start,$end,$color,$id);
+=item $image->arc($cy,$cy,$width,$height,$start,$end,$color);
 
 This draws arcs and ellipses.  (cx,cy) are the center of the arc, and
 (width,height) specify the width and height, respectively.  The
@@ -1531,13 +1608,31 @@ draw a circle, use the same value for width and height.
 
 Internally, arc() calls the ellipse() method of SVG.pm. Drawing with
 the special colors is also permitted. See the documentation for the
-line() method for additioanl details.
+line() method for additional details.
 
-NOT IMPLEMENTED
+Currently, true arcs are NOT supported, only those where the start and
+end equal 0 and 360 respectively resulting in a closed arc.
 
-=item $image->filledArc();
+=item $image->filledArc($cx,$cy,$width,$height,$start,$end,$color
+[,$arc_style])
 
-NOT IMPLEMENTED
+This method is like arc() except that it colors in the pie wedge with
+the selected color.  $arc_style is optional.  If present it is a
+bitwise OR of the following constants:
+
+gdArc           connect start & end points of arc with a rounded edge
+gdChord         connect start & end points of arc with a straight line
+gdPie           synonym for gdChord
+gdNoFill        outline the arc or chord
+gdEdged         connect beginning and ending of the arc to the center
+
+gdArc and gdChord are mutally exclusive.  gdChord just connects the
+starting and ending angles with a straight line, while gdArc pro-
+duces a rounded edge. gdPie is a synonym for gdArc. gdNoFill indi-
+cates that the arc or chord should be outlined, not filled.  gdEdged,
+used together with gdNoFill, indicates that the beginning and ending
+angles should be connected to the center; this is a good way to
+outline (rather than fill) a "pie slice."
 
 =item $image->fill();
 
@@ -1620,6 +1715,7 @@ Same as the previous example, except that it draws the text rotated
 counter-clockwise 90 degrees.
 
 =item $image->char($font,$x,$y,$char,$color)
+
 =item $image->charUp($font,$x,$y,$char,$color)
 
 These methods draw single characters at position (x,y) in the spec-
@@ -1630,6 +1726,7 @@ calls the string() method internally.
 
 =item @bounds = $image->stringFT($fgcolor,$font-
        name,$ptsize,$angle,$x,$y,$string)
+
 =item @bounds = $image->stringFT($fgcolor,$font-
        name,$ptsize,$angle,$x,$y,$string,\%options)
 
@@ -1924,6 +2021,7 @@ NOT IMPLEMENTED
 This returns the ASCII value of the first character in the font
 
 =item $width = $font->width
+
 =item $height = $font->height
 
 These return the width and height of the font.

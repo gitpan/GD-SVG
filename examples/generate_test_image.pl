@@ -21,6 +21,8 @@ sub BEGIN {
   $font_class  = $package . '::Font';
 }
 
+my $yoffset;
+
 my $image = $image_class->new('800','800');
 
 # Allocate some colors
@@ -74,133 +76,191 @@ $image->setThickness(1);
 # Styled and dashed lines
 
 # Rectangles
-$image->string(gdMediumBoldFont,10,100,'Rectangles...',$black);
-$image->rectangle(250,100,750,120,$black);
+$yoffset = 85;
+$yoffset += 15;
+$image->string(gdMediumBoldFont,10,$yoffset,'Rectangles...',$black);
+$image->rectangle(250,$yoffset,750,$yoffset+20,$black);
 
 # Filled rectangles
-$image->string(gdMediumBoldFont,10,140,'Filled rectangles...',$black);
-$image->filledRectangle(250,140,750,160,$red);
+$yoffset += 40;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled rectangles...',$black);
+$image->filledRectangle(250,$yoffset,750,$yoffset+20,$red);
 
 # Filled rectangles with borders
-$image->string(gdMediumBoldFont,10,180,'Filled rectangles (bordered)...',$black);
-$image->filledRectangle(250,180,750,200,$aqua);
-$image->rectangle(250,180,750,200,$black);
+$yoffset += 40;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled rectangles (bordered)...',$black);
+$image->filledRectangle(250,$yoffset,750,$yoffset+20,$aqua);
+$image->rectangle(250,$yoffset,750,$yoffset+20,$black);
+
+# Generic distribution of features
+my @xs = (qw/250 350 450 550 650/);
 
 # Polygons
+$yoffset += 40;
 my @star = ([40,0],[50,30],
 	    [80,40],[50,50],
 	    [40,80],[30,50],
 	    [0,40],[30,30],[40,0]);
 
-my @starting_positions = ([250,220],[350,220],[450,220],[550,220],[650,220]);
-$image->string(gdMediumBoldFont,10,220,'Polygons...',$black);
+$image->string(gdMediumBoldFont,10,$yoffset,'Polygons...',$black);
 $color_index = 0;
-foreach (@starting_positions) {
+foreach my $startx (@xs) {
   my $polygon = $poly_class->new();
-  my ($startx,$starty) = @$_;
   my $color = $colors[$color_index];
   foreach (@star) {
     my ($x,$y) = @$_;
-    $polygon->addPt($startx + $x,$starty + $y);
+    $polygon->addPt($startx + $x,$yoffset + $y);
   }
   $image->polygon($polygon,$color);
   $color_index++;
 }
 
 # Filled polygons
+$yoffset = 320;
 # This is the same as above, but using the offset()
 # method of the polygon object Kind of a kludgy example (we have to
 # start the iterative loop 100 pixels left of where we really want to
 # start in order to demonstarte the offset method.
-$image->string(gdMediumBoldFont,10,320,'Filled polygons...',$black);
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled polygons...',$black);
 $color_index = 0;
-my $y = 320;
 for (my $x=150;$x<=550;$x+=100) {
   my $polygon = $poly_class->new();
   my $color = $colors[$color_index];
   foreach (@star) {
     my ($starx,$stary) = @$_;
-    $polygon->addPt($starx + $x,$stary + $y);
+    $polygon->addPt($starx + $x,$stary + $yoffset);
   }
   $polygon->offset(100,0);
   $image->filledPolygon($polygon,$color);
   $color_index++;
 }
 
+
 # Filled bordered polygons
-$image->string(gdMediumBoldFont,10,420,'Filled polygons (bordered)...',$black);
+$yoffset += 100;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled polygons (bordered and boxed)...',$black);
 $color_index = 0;
-@starting_positions = ([250,420],[350,420],[450,420],[550,420],[650,420]);
-foreach (@starting_positions) {
+foreach my $startx (@xs) {
   my $polygon    = $poly_class->new();
-  my ($startx,$starty) = @$_;
   my $color = $colors[$color_index];
   foreach (@star) {
     my ($x,$y) = @$_;
-    $polygon->addPt($startx + $x,$starty + $y);
+    $polygon->addPt($startx + $x,$yoffset + $y);
   }
+  my ($left,$top,$right,$bottom) = $polygon->bounds();
+  $image->rectangle($left,$bottom,$right,$top,$black);
   $image->filledPolygon($polygon,$color);
   $image->polygon($polygon,$black);
   $color_index++;
 }
 
 # Ellipses
-$image->string(gdMediumBoldFont,10,520,'Ellipses...',$black);
+$yoffset += 100;
+my @ellipses = qw/290 390 490 590 690/;
+$image->string(gdMediumBoldFont,10,$yoffset,'Ellipses...',$black);
 $color_index = 0;
-@starting_positions = ([290,520],[390,520],[490,520],[590,520],[690,520]);
-foreach (@starting_positions) {
-  my ($x,$y) = @$_;
+foreach my $x (@ellipses) {
   my $color = $colors[$color_index];
-  $image->ellipse($x,$y,80,25,$color);
+  $image->ellipse($x,$yoffset,80,25,$color);
   $color_index++;
 }
 
 # Filled ellipeses
-$image->string(gdMediumBoldFont,10,550,'Filled ellipses...',$black);
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled ellipses...',$black);
 $color_index = 0;
-@starting_positions = ([290,550],[390,550],[490,550],[590,550],[690,550]);
-foreach (@starting_positions) {
-  my ($x,$y) = @$_;
+foreach my $x (@ellipses) {
   my $color = $colors[$color_index];
-  $image->filledEllipse($x,$y,80,25,$color);
+  $image->filledEllipse($x,$yoffset,80,25,$color);
   $color_index++;
 }
 
-$image->string(gdMediumBoldFont,10,580,'Filled ellipses (bordered, increasing thickness)...',$black);
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled ellipses (bordered, increasing thickness)...',$black);
 $color_index = 0;
-@starting_positions = ([290,580],[390,580],[490,580],[590,580],[690,580]);
-foreach (@starting_positions) {
+foreach my $x (@ellipses) {
   $image->setThickness($color_index+1);
-  my ($x,$y) = @$_;
   my $color = $colors[$color_index];
-  $image->filledEllipse($x,$y,80,25,$color);
-  $image->ellipse($x,$y,80,25,$black);
+  $image->filledEllipse($x,$yoffset,80,25,$color);
+  $image->ellipse($x,$yoffset,80,25,$black);
   $color_index++;
 }
 $image->setThickness(1);
 
-# Arcs
-#$image->string(gdMediumBoldFont,10,610,'Arcs...',$black);
-#$color_index = 0;
-#@starting_positions = ([290,610],[390,610],[490,610],[590,610],[690,610]);
-#foreach (@starting_positions) {
-#  my ($x,$y) = @$_;
-#  my $color = $colors[$color_index];
-#  $image->arc($x,$y,80,25,0,180,$color);
-#  $color_index++;
-#}
+# Arcs (closed)
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Arcs (closed)...',$black);
+$color_index = 0;
+foreach my $x (@ellipses) {
+  my $color = $colors[$color_index];
+  $image->arc($x,$yoffset,80,25,0,360,$color);
+  $color_index++;
+}
+
+# Arcs on a circle (open)
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Arcs on a circle (open)...',$black);
+$color_index = 0;
+foreach my $x (@ellipses) {
+  my $color = $colors[$color_index];
+  #$image->arc($x,$yoffset,25,80,0,270,$color);
+  $image->arc($x,$yoffset,25,25,0,90,$color);   # arcs on a circle...
+  $color_index++;
+}
+
+# Arcs on an ellipse (open)
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Arcs on an ellipse (open)...',$black);
+$color_index = 0;
+foreach my $x (@ellipses) {
+  my $color = $colors[$color_index];
+  $image->arc($x,$yoffset,25,80,0,270,$color);
+  $color_index++;
+}
+
+# filledArcs (closed)
+$yoffset += 60;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled arcs (closed)...',$black);
+$color_index = 0;
+foreach my $x (@ellipses) {
+  my $color = $colors[$color_index];
+  $image->filledArc($x,$yoffset,80,25,0,360,$color);
+  $color_index++;
+}
+
+# filledArcs (open)
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled arcs (open)...',$black);
+$color_index = 0;
+foreach my $x (@ellipses) {
+  my $color = $colors[$color_index];
+  $image->filledArc($x,$yoffset,80,25,40,120,$color);
+  $color_index++;
+}
+
+# filledArcs (open bordered)
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Filled arcs (open and bordered)...',$black);
+$color_index = 0;
+foreach my $x (@ellipses) {
+  my $color = $colors[$color_index];
+  $image->filledArc($x,$yoffset,80,25,20,220,$color);
+  $image->arc($x,$yoffset,80,25,20,220,$color);
+  $color_index++;
+}
 
 # Fonts...
-$image->string(gdMediumBoldFont,10,650,'Fonts',$black);
-$image->string(gdTinyFont,250,650,'gdTinyFont',$black);
-$image->string($font_class->Tiny,400,650,"$font_class->Tiny",$black);
-$image->string(gdSmallFont,250,670,'gdSmallFont',$black);
-$image->string($font_class->Small,400,670,"$font_class->Small",$black);
-$image->string(gdMediumBoldFont,250,690,'gdMediumBoldFont',$black);
-$image->string($font_class->MediumBold,400,690,"$font_class->MediumBold",$black);
-$image->string(gdLargeFont,250,710,'gdLargeFont',$black);
-$image->string($font_class->Large,400,710,"$font_class->Large",$black);
-$image->string(gdGiantFont,250,730,'gdGiantFont',$black);
-$image->string($font_class->Giant,400,730,"$font_class->Giant",$black);
+$yoffset += 30;
+$image->string(gdMediumBoldFont,10,$yoffset,'Fonts',$black);
+$image->string(gdTinyFont,250,$yoffset,'gdTinyFont',$black);
+$image->string($font_class->Tiny,400,$yoffset,"$font_class->Tiny",$black);
+$image->string(gdSmallFont,250,$yoffset+20,'gdSmallFont',$black);
+$image->string($font_class->Small,400,$yoffset+20,"$font_class->Small",$black);
+$image->string(gdMediumBoldFont,250,$yoffset+40,'gdMediumBoldFont',$black);
+$image->string($font_class->MediumBold,400,$yoffset+40,"$font_class->MediumBold",$black);
+$image->string(gdLargeFont,250,$yoffset+60,'gdLargeFont',$black);
+$image->string($font_class->Large,400,$yoffset+60,"$font_class->Large",$black);
+$image->string(gdGiantFont,250,$yoffset+80,'gdGiantFont',$black);
+$image->string($font_class->Giant,400,$yoffset+80,"$font_class->Giant",$black);
 
 print $image->$image_type();
