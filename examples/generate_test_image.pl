@@ -75,9 +75,11 @@ $image->line(250,85,750,85,$orange);
 $image->setThickness(1);
 
 # Styled and dashed lines
+$image->setStyle($black,$red,$red,$red,$red,$red,$red,$black,$black,$black,$black,$green);
+$image->line(250,90,750,90,gdStyled);
 
 # Rectangles
-$yoffset = 85;
+$yoffset = 90;
 $yoffset += 15;
 $image->string(gdMediumBoldFont,10,$yoffset,'Rectangles...',$black);
 $image->rectangle(250,$yoffset,750,$yoffset+20,$black);

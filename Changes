@@ -1,5 +1,10 @@
 Revision history for Perl extension GD::SVG.
 
+0.23  Wed Dec 3 14:00::02 2003
+	- Added kludge for setStyle() and gdStyled()
+	- Changed the underlying handling of colors - color methods
+     	  now return integers like GD
+
 0.22  Sun Nov 30 11:33:04 2003
 	- added support for the filledArc exported special styles:
 	  gdArc, gdEdged, gdChord, gdPie, and gdNoFill
