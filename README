@@ -1,0 +1,65 @@
+GD/SVG version 0.01
+===================
+
+GD::SVG seamlessly enables the scalable vector graphics (SVG) output
+from scripts written using GD.  It accomplishes this by translating GD
+functions into SVG functions.
+
+IMPORTANT NOTES
+
+1. In addition to GD::SVG, Ronan Oger has created a similar module
+(SVG::GD). In principle these modules perform a similar function but
+go about it in slightly different ways.  Ronan and I are now
+concurrently developing these modules which may be merged in the
+future.
+
+2. See the internal documentation on important notes on how to use
+GD::SVG.
+
+QUICKSTART USAGE GUIDE
+
+To enable SVG output, you must change several elements of your
+script. This includes the use statement and direct calls to the
+classes that GD implements.
+
+In short:
+    
+    # use GD;
+    use GD::SVG;
+  
+    # my $image = GD::Image->new($width,$height);
+    my $image = GD::SVG::Image->new($width,$height);
+
+
+INSTALLATION
+
+To install this module type the following:
+
+   perl Makefile.PL
+   make
+   make test
+   sudo make install
+
+You may need to be root (or sudo) to executre the make install
+command.
+
+DEPENDENCIES
+
+This module requires these other modules and libraries:
+
+  GD, SVG
+
+ACKNOWLEDGEMENTS
+
+In particular, I'd like to acknowledge Lincoln Stein, creator of GD
+(and my postdoctoral mentor) and Ronan Oger, creator of the SVG
+module.
+
+COPYRIGHT AND LICENCE
+
+Copyright (C) 2003 Todd Harris (harris@cshl.org) and the Cold Spring
+Harbor Laboratory
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself. 
+
