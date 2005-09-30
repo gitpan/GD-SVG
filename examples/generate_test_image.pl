@@ -6,10 +6,10 @@ use strict;
 my ($image_class,$poly_class,$font_class,$image_type);
 sub BEGIN {
   chomp (my $package = shift);
-  $package or die "\nUsage: lots_of_glyphs IMAGE_CLASS
+  $package or die "\nUsage: generate_test_image.pl IMAGE_CLASS
 \t- where IMAGE_CLASS is one of GD or GD::SVG
 \t- GD generate png output; GD::SVG generates SVG.\n";
-  
+
   if ($package eq 'GD::SVG') {
     $image_type = 'svg';
   } else {
@@ -160,7 +160,7 @@ foreach my $startx (@xs) {
     $polygon->addPt($startx + $x,$yoffset + $y);
   }
   my ($left,$top,$right,$bottom) = $polygon->bounds();
-  $image->rectangle($left,$bottom,$right,$top,$black);
+  $image->rectangle($left,$top,$right,$bottom,$black);
   $image->filledPolygon($polygon,$color);
   $image->polygon($polygon,$black);
   $color_index++;
@@ -273,19 +273,55 @@ $image->string(gdTinyFont,630,$yoffset+20,'gdArc, then gdEdged|gdNoFill',$black)
 # Fonts...
 $yoffset += 40;
 $image->string(gdMediumBoldFont,10,$yoffset,'Fonts',$black);
+
+# Print examples of the oo-method calls
 $image->string(gdTinyFont,250,$yoffset,'gdTinyFont',$black);
 $image->string($font_class->Tiny,400,$yoffset,"$font_class->Tiny",$black);
+
 $image->string(gdSmallFont,250,$yoffset+20,'gdSmallFont',$black);
 $image->string($font_class->Small,400,$yoffset+20,"$font_class->Small",$black);
+
 $image->string(gdMediumBoldFont,250,$yoffset+40,'gdMediumBoldFont',$black);
 $image->string($font_class->MediumBold,400,$yoffset+40,"$font_class->MediumBold",$black);
+
 $image->string(gdLargeFont,250,$yoffset+60,'gdLargeFont',$black);
 $image->string($font_class->Large,400,$yoffset+60,"$font_class->Large",$black);
+
 $image->string(gdGiantFont,250,$yoffset+80,'gdGiantFont',$black);
 $image->string($font_class->Giant,400,$yoffset+80,"$font_class->Giant",$black);
 
+# stringUp is broken with SVG 2.32?
 $image->stringUp(gdGiantFont,370,$yoffset+100,'gdGiantFont',$black);
 $image->stringUp($font_class->Giant,550,$yoffset+100,"$font_class->Giant",$black);
 
+# Fetch all elements of the source image
+my @elements = $image->{img}->getElements;
+foreach (@elements) {
+  my $att = $_->getAttributes();
+  # Points|rectangles, circles, lines
+  my $x = $att->{x} || $att->{cx} || $att->{x1};
+  my $y = $att->{y} || $att->{cy} || $att->{y1};
+  
+  # Get the first point for polygons
+  unless ($x && $y) {
+    my $points = $att->{points};
+    my @points = split(/\s/,$att->{points});
+    if ($points) {
+      ($x,$y) = split(',',$points[0]);
+      print STDERR "$x $y\n";
+    }
+  }
+
+  # Paths
+  unless ($x && $y) {
+    my @d = split(/\s/,$att->{d});
+    if (@d) {
+      ($x,$y) = split(',',$d[0]);
+      $x =~ s/^M//;  # Remove the style directive
+    }
+    print STDERR "$x $y\n";
+  }
+
+}
 
 print $image->$image_type();
