@@ -7,8 +7,8 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.27';
-# $Id: SVG.pm,v 1.5 2005/09/14 13:46:14 todd Exp $
+$VERSION = '0.28';
+# $Id: SVG.pm,v 1.6 2006/05/26 12:13:14 todd Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
 # Methods that support this are commented out multiple times (ie ######)
@@ -709,7 +709,8 @@ sub filledArc {
     # are we trying to draw a pie?
     elsif ($end - $start > 180 && ($fill_style == 0 || $fill_style == 4)) {
       $self->filledArc($cx,$cy,$width,$height,$start,$start+180,$color_index,$fill_style);
-      $self->filledArc($cx,$cy,$width,$height,$start+180,$end,$color_index,$fill_style);
+#      $self->filledArc($cx,$cy,$width,$height,$start+180,$end,$color_index,$fill_style);
+      $result = $self->filledArc($cx,$cy,$width,$height,$start+180,$end,$color_index,$fill_style);
     }
 
     else {
@@ -909,7 +910,7 @@ sub stringUp {
   my $id = $self->_create_id($x,$y);
   my $formatting = $font_obj->formatting();
   my $color = $self->_get_color($color_index);
-  $x .= $font_obj->height;
+  $x += $font_obj->height;
   my $result =
     $img->text(
 	       id=>$id,
@@ -2279,7 +2280,8 @@ Lincoln Stein, my postdoctoral mentor, author of GD.pm, and all around
 Perl stud. Ronan Oger, author of SVG.pm conceptualized and implemented
 another wrapper around GD at about the exact same time as this module.
 He also provided helpful discussions on implementing GD functions into
-SVG.
+SVG.  Oliver Drechsel and Marc Lohse provided patches to actually
+make the stringUP method functional.
 
 =head1 AUTHOR
 
@@ -2287,7 +2289,7 @@ Todd Harris, PhD E<lt>harris@cshl.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2003 by Todd Harris and the Cold Spring Harbor Laboratory
+Copyright @ 2003-2005 Todd Harris and the Cold Spring Harbor Laboratory
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

@@ -295,20 +295,23 @@ $image->stringUp(gdGiantFont,370,$yoffset+100,'gdGiantFont',$black);
 $image->stringUp($font_class->Giant,550,$yoffset+100,"$font_class->Giant",$black);
 
 # Fetch all elements of the source image
-my @elements = $image->{img}->getElements;
-foreach (@elements) {
-  my $att = $_->getAttributes();
-  # Points|rectangles, circles, lines
-  my $x = $att->{x} || $att->{cx} || $att->{x1};
-  my $y = $att->{y} || $att->{cy} || $att->{y1};
-  
-  # Get the first point for polygons
-  unless ($x && $y) {
-    my $points = $att->{points};
-    my @points = split(/\s/,$att->{points});
-    if ($points) {
-      ($x,$y) = split(',',$points[0]);
-      print STDERR "$x $y\n";
+if ($image_type eq 'GD::SVG') {
+  # Fetch all elements of the source image
+  my @elements = $image->{img}->getElements;
+  foreach (@elements) {
+    my $att = $_->getAttributes();
+    # Points|rectangles, circles, lines
+    my $x = $att->{x} || $att->{cx} || $att->{x1};
+    my $y = $att->{'y'} || $att->{cy} || $att->{y1};
+    
+    # Get the first point for polygons
+    unless ($x && $y) {
+      my $points = $att->{points};
+      my @points = split(/\s/,$att->{points});
+      if ($points) {
+	($x,$y) = split(',',$points[0]);
+	print STDERR "$x $y\n";
+      }
     }
   }
 
@@ -321,7 +324,6 @@ foreach (@elements) {
     }
     print STDERR "$x $y\n";
   }
-
 }
 
 print $image->$image_type();

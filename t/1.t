@@ -5,7 +5,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 50;
+use Test::More tests => 49;
 BEGIN { use_ok('GD::SVG') };
 
 #########################
@@ -70,7 +70,6 @@ ok($polygon->length > 0,'polygon length ok');
 ok($polygon->vertices > 0,'vertices ok');
 ok($image->polygon($polygon,$black),'create polygon ok');
 ok($image->filledPolygon($polygon,$black),'create filledPolygon ok');
-ok($polygon->offset(10,10) > 0,'polygon offset ok');
 
 # Fonts
 ok(GD::SVG::Font->Tiny > 0,'GD::SVG::Font->Tiny ok');
