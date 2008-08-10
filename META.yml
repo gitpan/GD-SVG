@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                GD-SVG
-version:             0.29
+version:             0.30
 abstract:            Seamlessly enable SVG output from scripts written using GD
 license:             ~
 author:              

@@ -7,8 +7,8 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.29';
-# $Id: SVG.pm,v 1.8 2008/08/07 19:13:12 lstein Exp $
+$VERSION = '0.30';
+# $Id: SVG.pm,v 1.10 2008/08/10 14:45:06 todd Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
 # Methods that support this are commented out multiple times (ie ######)
@@ -501,7 +501,7 @@ sub endGroup {
     elsif (@{$this->{img}}>1) {
 	pop @{$this->{img}};
     }
-    delete $self->{currentGroup};
+    delete $this->{currentGroup};
 }
 sub newGroup {
     my $this  = shift;
