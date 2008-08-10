@@ -1,5 +1,8 @@
 Revision history for Perl extension GD::SVG.
 
+0.30  Thu Aug  7 14:37:25 EDT 2008
+        - Added grouping features.
+
 0.28  Mon May 22 12:35:55 EDT 2006
         - fixed result codes that were causing broken tests
           (thanks to LS)

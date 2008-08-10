@@ -7,8 +7,8 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.28';
-# $Id: SVG.pm,v 1.6 2006/05/26 12:13:14 todd Exp $
+$VERSION = '0.29';
+# $Id: SVG.pm,v 1.8 2008/08/07 19:13:12 lstein Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
 # Methods that support this are commented out multiple times (ie ######)
@@ -99,7 +99,7 @@ use constant TEXT_KLUDGE       => '2';
 # Trap GD methods that are not yet implemented in SVG.pm
 sub AUTOLOAD {
   my $self = shift;
-  warn "GD method $AUTOLOAD is not implemented in GD::SVG" if ($self->{debug} > 0);
+  warn "GD method $AUTOLOAD is not implemented in GD::SVG" if ref $self && $self->{debug} > 0;
 }
 
 ##################################################
@@ -263,7 +263,7 @@ sub new {
   my ($self,$width,$height,$debug) = @_;
   my $this = bless {},$self;
   my $img = SVG->new(width=>$width,height=>$height);
-  $this->{img}    = $img;
+  $this->{img}    = [$img];
   $this->{width}  = $width;
   $this->{height} = $height;
 
@@ -279,13 +279,33 @@ sub new {
   return $this;
 }
 
+sub img {
+    my $this = shift;
+    return $this->{img}[0];
+}
+
+sub currentGroup {
+    my $this = shift;
+    $this->{currentGroup} = shift if @_;
+    return $this->{currentGroup} || $this->{img}[-1];
+    return $this->{img}[-1];
+}
+
+sub closeAllGroups {
+    my $this = shift;
+    while (@{$this->{img}}>1) {
+	pop @{$this->{img}};
+    }
+}
+
 
 #############################
 # Image Data Output Methods #
 #############################
 sub svg {
   my $self = shift;
-  my $img = $self->{img};
+  $self->closeAllGroups;
+  my $img = $self->img;
   $img->xmlify(-pubid => "-//W3C//DTD SVG 1.0//EN",
                -inline => 1);
 }
@@ -453,6 +473,42 @@ sub setThickness {
   # $self->{prev_line_thickness} = (!defined $self->{prev_line_thickness}) ? $thickness : undef;
 }
 
+
+########################
+# Grouping subroutines #
+########################
+sub startGroup {
+    my $this  = shift;
+    my $id    = shift;
+    my $style = shift;
+
+    my @args;
+    push @args,(id    => $id)    if defined $id;
+    push @args,(style => $style) if defined $style;
+
+    my $group = $this->currentGroup->group(@args);
+    push @{$this->{img}},$group;
+    return $group;
+}
+sub endGroup {
+    my $this  = shift;
+    my $group = shift;
+
+    if ($group) {
+	my @imgs = grep {$_ ne $group} @{$this->{img}};
+	$this->{img} = \@imgs;
+    }
+    elsif (@{$this->{img}}>1) {
+	pop @{$this->{img}};
+    }
+    delete $self->{currentGroup};
+}
+sub newGroup {
+    my $this  = shift;
+    my $group = $this->startGroup(@_);
+    eval "require GD::Group" unless GD::Group->can('new');
+    return GD::Group->new($this,$group);
+}
 
 #######################
 # Drawing subroutines #
@@ -786,7 +842,7 @@ sub copy {
   my $bottomy = $srcy + $height;
 
   # Fetch all elements of the source image
-  my @elements = $source->{img}->getElements;
+  my @elements = $source->img->getElements;
   foreach my $element (@elements) {
     my $att = $element->getAttributes();
     # Points|rectangles|text, circles|ellipses, lines
@@ -859,7 +915,7 @@ sub copy {
       # Create new elements for the destination image
       # via the generic SVG::Element::tag method
       my %attributes = $element->getAttributes;
-      $self->{img}->tag($type,%attributes);
+      $self->img->tag($type,%attributes);
     }
   }
 }
@@ -889,7 +945,7 @@ sub _transform_coords {
 ##################################################
 sub string {
   my ($self,$font_obj,$x,$y,$text,$color_index) = @_;
-  my $img = $self->{img};
+  my $img = $self->currentGroup;
   my $id = $self->_create_id($x,$y);
   my $formatting = $font_obj->formatting();
   my $color = $self->_get_color($color_index);
@@ -906,7 +962,7 @@ sub string {
 
 sub stringUp {
   my ($self,$font_obj,$x,$y,$text,$color_index) = @_;
-  my $img = $self->{img};
+  my $img = $self->currentGroup;
   my $id = $self->_create_id($x,$y);
   my $formatting = $font_obj->formatting();
   my $color = $self->_get_color($color_index);
@@ -966,7 +1022,7 @@ use Carp 'confess';
 
 sub _prep {
   my ($self,@params) = @_;
-  my $img = $self->{img};
+  my $img = $self->currentGroup;
   my $id = $self->_create_id(@params);
   # my $thickness = $self->_get_thickness() || 1;
 #  return ($img,$id,$thickness,undef);
@@ -1131,7 +1187,6 @@ sub _error {
 }
 
 sub DESTROY { }
-
 
 1;
 
@@ -1389,6 +1444,90 @@ warning to STDERR.
   Font methods:
     $font->nchars()
     $font->offset()
+
+=head1 GROUPING FUNCTIONS GD::SVG
+
+GD::SVG supports three additional methods that provides the ability to
+recursively group objects:
+
+=over 4
+
+=item $this->startGroup([$id,\%style]), $this->endGroup()
+
+These methods start and end a group in a procedural manner. Once a
+group is started, all further drawing will be appended to the group
+until endGroup() is invoked. You may optionally pass a string ID and
+an SVG styles hash to startGroup.
+
+=item $group = $this->newGroup([$id,\%style])
+
+This method returns a GD::Group object, which has all the behaviors of
+a GD::SVG object except that it draws within the current group. You
+can invoke this object's drawing methods to draw into a group. The
+group is closed once the object goes out of scope. While the object is
+open, invoking drawing methods on the parent GD::SVG object will also
+draw into the group until it goes out of scope.
+
+Here is an example of using grouping in the procedural way:
+
+ use GD::SVG;
+ my $img   = GD::SVG::Image->new(500,500);
+ my $white = $img->colorAllocate(255,255,255);
+ my $black = $img->colorAllocate(0,0,0);
+ my $blue  = $img->colorAllocate(0,0,255);
+ my $red   = $img->colorAllocate(255,0,0);
+
+ $img->startGroup('circle in square');
+ $img->rectangle(100,100,400,400,$blue);
+
+ $img->startGroup('circle and boundary');
+ $img->filledEllipse(250,250,200,200,$red);
+ $img->ellipse(250,250,200,200,$black);
+
+ $img->endGroup;
+ $img->endGroup;
+ 
+ print $img->svg;
+
+Here is an example of using grouping with the GD::Group object:
+
+  ...
+
+ my $g1 = $img->newGroup('circle in square');
+ $g1->rectangle(100,100,400,400,$blue);
+
+ my $g2 = $g1->startGroup('circle and boundary');
+ $g2->filledEllipse(250,250,200,200,$red);
+ $g2->ellipse(250,250,200,200,$black);
+
+ print $img->svg;
+
+Finally, here is a fully worked example of using the GD::Simple module
+to make the syntax cleaner:
+
+ #!/usr/bin/perl
+    
+ use strict;
+ use GD::Simple;
+
+ GD::Simple->class('GD::SVG');
+
+ my $img = GD::Simple->new(500,500);
+ $img->bgcolor('white');
+ $img->fgcolor('blue');
+
+ my $g1 = $img->newGroup('circle in square');
+ $g1->rectangle(100,100,400,400);
+ $g1->moveTo(250,250);
+
+ my $g2 = $g1->newGroup('circle and boundary');
+ $g2->fgcolor('black');
+ $g2->bgcolor('red');
+ $g2->ellipse(200,200);
+
+ print $img->svg;
+
+=back
 
 =head1 GD VERSUS GD::SVG METHODS
 
