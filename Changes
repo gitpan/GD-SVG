@@ -1,5 +1,12 @@
 Revision history for Perl extension GD::SVG.
 
+0.31  Thu Aug 14 08:16:37 MDT 2008
+        - removed GD version requirement
+        - fixed _distill_gdSpecial when using non-numeric colors (from srezic)
+        - fixed partically incomplete lines with square caps (jettero)
+        - Correctly handle the case where a rectangle's bottomright and topleft 
+	are flipped. This is arguably a caller bug, but GD handles it.
+
 0.30  Thu Aug  7 14:37:25 EDT 2008
         - Added grouping features.
 

@@ -313,16 +313,16 @@ if ($image_type eq 'GD::SVG') {
 	print STDERR "$x $y\n";
       }
     }
-  }
-
-  # Paths
-  unless ($x && $y) {
-    my @d = split(/\s/,$att->{d});
-    if (@d) {
-      ($x,$y) = split(',',$d[0]);
-      $x =~ s/^M//;  # Remove the style directive
+    
+    # Paths
+    unless ($x && $y) {
+	my @d = split(/\s/,$att->{d});
+	if (@d) {
+	    ($x,$y) = split(',',$d[0]);
+	    $x =~ s/^M//;  # Remove the style directive
+	}
+	print STDERR "$x $y\n";
     }
-    print STDERR "$x $y\n";
   }
 }
 

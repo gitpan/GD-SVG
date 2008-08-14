@@ -7,8 +7,8 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.30';
-# $Id: SVG.pm,v 1.10 2008/08/10 14:45:06 todd Exp $
+$VERSION = '0.31';
+# $Id: SVG.pm,v 1.12 2008/08/14 14:21:07 todd Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
 # Methods that support this are commented out multiple times (ie ######)
@@ -542,6 +542,12 @@ sub line {
     ###GD### $self->{gd}->line($x1,$y1,$x2,$y2,$color_index);
     my ($img,$id) = $self->_prep($x1,$y1);
     my $style = $self->_build_style($id,$color_index,$color_index);
+    
+    # Suggested patch by Jettero to fix lines
+    # that don't go to the ends of their length.
+    # This could possibly be relocated to _build_style
+    # but I'm unsure of the ramifications on other features.
+    $style->{'stroke-linecap'} = 'square';
     my $result = $img->line(x1=>$x1,y1=>$y1,
 			    x2=>$x2,y2=>$y2,
 			    id=>$id,
@@ -564,6 +570,10 @@ sub rectangle {
     ###GD###$self->{gd}->rectangle($x1,$y1,$x2,$y2,$color_index);
     my ($img,$id) = $self->_prep($x1,$y1);
     my $style = $self->_build_style($id,$color_index,$fill);
+
+    # flip coordinates if they are "backwards"
+    ($x1,$x2) = ($x2,$x1) if $x1 > $x2;
+    ($y1,$y2) = ($y2,$y1) if $y1 > $y2;
     my $result = 
       $img->rectangle(x=>$x1,y=>$y1,
 		      width  =>$x2-$x1,
@@ -1086,9 +1096,14 @@ sub _distill_gdSpecial {
     foreach (@colors) {
       if (!$prev) {
 	$dash_length = 1;
-      } elsif ($prev && $prev == $_) {
+      # Numeric comparisons work for normal colors
+      # but fail for named special colors like gdTransparent
+      } elsif ($prev && $prev eq $_) {
 	$dash_length++;
-      } elsif ($prev && $prev != $_) {
+      } elsif ($prev && $prev ne $_) {
+#      } elsif ($prev && $prev == $_) {
+#	$dash_length++;
+#      } elsif ($prev && $prev != $_) {
 	push (@{$self->{dasharray}},$dash_length);
 	$dash_length = 1;
       }

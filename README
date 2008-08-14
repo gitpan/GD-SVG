@@ -65,9 +65,11 @@ special credit. Ronan Oger, creator of the SVG module and co-creator
 of a similar GD-wrapper, has been very helpful with discussions about
 interfacing GD to SVG.
 
+Patches: srezic (color comparisons), jettero (fixed linecaps).
+
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2003 Todd Harris (harris@cshl.org) and the Cold Spring
+Copyright (C) 2003-2008 Todd Harris (harris@cshl.edu) and the Cold Spring
 Harbor Laboratory
 
 This library is free software; you can redistribute it and/or modify
