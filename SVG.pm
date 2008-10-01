@@ -7,7 +7,7 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.31';
+$VERSION = '0.32';
 # $Id: SVG.pm,v 1.12 2008/08/14 14:21:07 todd Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
@@ -1017,6 +1017,9 @@ sub getBounds {
   my $height = $self->{height};
   return($width,$height);
 }
+
+sub width  { (shift->getBounds)[0] }
+sub height { (shift->getBounds)[1] }
 
 sub isTrueColor { shift->_error('isTrueColor'); }
 sub compare     { shift->_error('compare'); }
