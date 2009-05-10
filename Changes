@@ -1,7 +1,9 @@
 Revision history for Perl extension GD::SVG.
 
-0.32  Wed Oct 01 12:19:22 MDT 2008
-        - Added width and height accessors
+0.33  Sun May 10 04:14:12 MDT 2009
+        - Can now embed pixmap information inside an SVG (Lincoln Stein)
+        - Improvements to alpha support (Lincoln Stein)
+        - Ghost methods for more complete mapping to GD (Jason Stajich)
 
 0.31  Thu Aug 14 08:16:37 MDT 2008
         - removed GD version requirement

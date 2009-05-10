@@ -7,8 +7,8 @@ use SVG;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 require Exporter;
 
-$VERSION = '0.32';
-# $Id: SVG.pm,v 1.12 2008/08/14 14:21:07 todd Exp $
+$VERSION = '0.33';
+# $Id: SVG.pm,v 1.16 2009/05/10 14:07:17 todd Exp $
 
 # Conditional support for side-by-side raster generation. Off for now.
 # Methods that support this are commented out multiple times (ie ######)
@@ -326,10 +326,11 @@ sub svg {
 # As with GD, colorAllocate returns integers...
 # This could easily rely on GD itself to generate the indices
 sub colorAllocate {
-  my ($self,$r,$g,$b) = @_;
-  $r ||= 0;
-  $g ||= 0;
-  $b ||= 0;
+  my ($self,$r,$g,$b,$alpha) = @_;
+  $r     ||= 0;
+  $g     ||= 0;
+  $b     ||= 0;
+  $alpha ||= 0;
 
   ###GD###my $newindex = $self->{gd}->colorAllocate($r,$g,$b);
 
@@ -337,7 +338,7 @@ sub colorAllocate {
   # colorDeallocate removes keys.
   # Instead use the colors_added array.
   my $new_index = (defined $self->{colors_added}) ? scalar @{$self->{colors_added}} : 0;
-  $self->{colors}->{$new_index} = [$r,$g,$b];
+  $self->{colors}->{$new_index} = [$r,$g,$b,$alpha];
 
   # Keep a list of colors in the order that they are added
   # This is used as a kludge for setBrush
@@ -346,9 +347,9 @@ sub colorAllocate {
 }
 
 sub colorAllocateAlpha {
-  my ($self,$r,$g,$b,$alpha) = @_;
-  ###GD###$self->{gd}->colorAllocateAlpha($r,$g,$b,$alpha);
-  $self->_error('colorAllocateAlpha');
+    my $self = shift;
+    ###GD###$self->{gd}->colorAllocateAlpha($r,$g,$b,$alpha);
+    $self->colorAllocate(@_);
 }
 
 sub colorDeallocate {
@@ -844,90 +845,98 @@ sub fillToBorder { shift->_error('fillToBorder'); }
 # Taking a stab at implementing the copy() methods
 # Should be relatively easy to implement clone() from this
 sub copy {
-  my ($self,$source,$dstx,$dsty,$srcx,$srcy,$width,$height) = @_;
+    my $self = shift;
+    my ($source,$dstx,$dsty,$srcx,$srcy,$width,$height) = @_;
 
-  my $topx    = $srcx;
-  my $topy    = $srcy;
-  my $bottomx = $srcx + $width;   # arithmetic right here?
-  my $bottomy = $srcy + $height;
-
-  # Fetch all elements of the source image
-  my @elements = $source->img->getElements;
-  foreach my $element (@elements) {
-    my $att = $element->getAttributes();
-    # Points|rectangles|text, circles|ellipses, lines
-    my $x = $att->{x} || $att->{cx} || $att->{x1};
-    my $y = $att->{y} || $att->{cy} || $att->{y1};
-
-    # Use the first point for polygons
-    unless ($x && $y) {
-      my @points = split(/\s/,$att->{points});
-      if (@points) {
-	($x,$y) = split(',',$points[0]);
-      }
+    # special case -- if we have been asked to copy a
+    # GD::Image into us, then we embed an image with the
+    # data:url
+    if ($source->isa('GD::Image') || $source->isa('GD::Simple')) {
+	return $self->_copy_image(@_);
     }
 
-    # Paths
-    unless ($x && $y) {
-      my @d = split(/\s/,$att->{d});
-      if (@d) {
-	($x,$y) = split(',',$d[0]);
-	$x =~ s/^M//;  # Remove the style directive
-      }
-    }
+    my $topx    = $srcx;
+    my $topy    = $srcy;
+    my $bottomx = $srcx + $width;   # arithmetic right here?
+    my $bottomy = $srcy + $height;
 
-    # Are the starting coords within the bounds of the desired rectangle?
-    # We will simplistically assume that the entire glyph fits inside
-    # the rectangle which may not be true.
-    if (($x >= $topx && $y >= $topy) &&
-	($x <= $bottomx && $y <= $bottomy)) {
-      my $type = $element->getType;
-      # warn "$type $x $y $bottomx $bottomy $topx $topy"; 
+    # Fetch all elements of the source image
+    my @elements = $source->img->getElements;
+    foreach my $element (@elements) {
+	my $att = $element->getAttributes();
+	# Points|rectangles|text, circles|ellipses, lines
+	my $x = $att->{x} || $att->{cx} || $att->{x1};
+	my $y = $att->{y} || $att->{cy} || $att->{y1};
 
-      # Transform the coordinates as necessary,
-      # calculating the offsets relative to the
-      # original bounding rectangle in the source image
-
-      # Text or rectangles
-      if ($type eq 'text' || $type eq 'rect') {
-	my ($newx,$newy) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
-	$element->setAttribute('x',$newx);
-	$element->setAttribute('y',$newy);	
-	# Circles or ellipses
-      } elsif ($type eq 'circle' || $type eq 'ellipse') {
-	my ($newx,$newy) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
-	$element->setAttribute('cx',$newx);
-	$element->setAttribute('cy',$newy);
-	# Lines
-      } elsif ($type eq 'line') {
-	my ($newx1,$newy1) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
-      	my ($newx2,$newy2) = _transform_coords($topx,$topy,$att->{x2},$element->{y2},$dstx,$dsty);
-      	$element->setAttribute('x1',$newx1);
-	$element->setAttribute('y1',$newy1);
-      	$element->setAttribute('x2',$newx2);
-	$element->setAttribute('y2',$newy2);
-	# Polygons
-      } elsif ($type eq 'polygon') {
-	my @points = split(/\s/,$att->{points});
-	my @transformed;
-	foreach (@points) {
-	  ($x,$y) = split(',',$_);
-	  my ($newx,$newy) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
-	  push (@transformed,"$newx,$newy");
+	# Use the first point for polygons
+	unless ($x && $y) {
+	    my @points = split(/\s/,$att->{points});
+	    if (@points) {
+		($x,$y) = split(',',$points[0]);
+	    }
 	}
-	my $transformed = join(" ",@transformed);
-	$element->setAttribute('points',$transformed);
+
 	# Paths
-      } elsif ($type eq 'path') {
+	unless ($x && $y) {
+	    my @d = split(/\s/,$att->{d});
+	    if (@d) {
+		($x,$y) = split(',',$d[0]);
+		$x =~ s/^M//;  # Remove the style directive
+	    }
+	}
 
-      }
+	# Are the starting coords within the bounds of the desired rectangle?
+	# We will simplistically assume that the entire glyph fits inside
+	# the rectangle which may not be true.
+	if (($x >= $topx && $y >= $topy) &&
+	    ($x <= $bottomx && $y <= $bottomy)) {
+	    my $type = $element->getType;
+	    # warn "$type $x $y $bottomx $bottomy $topx $topy"; 
 
-      # Create new elements for the destination image
-      # via the generic SVG::Element::tag method
-      my %attributes = $element->getAttributes;
-      $self->img->tag($type,%attributes);
+	    # Transform the coordinates as necessary,
+	    # calculating the offsets relative to the
+	    # original bounding rectangle in the source image
+
+	    # Text or rectangles
+	    if ($type eq 'text' || $type eq 'rect') {
+		my ($newx,$newy) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
+		$element->setAttribute('x',$newx);
+		$element->setAttribute('y',$newy);	
+		# Circles or ellipses
+	    } elsif ($type eq 'circle' || $type eq 'ellipse') {
+		my ($newx,$newy) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
+		$element->setAttribute('cx',$newx);
+		$element->setAttribute('cy',$newy);
+		# Lines
+	    } elsif ($type eq 'line') {
+		my ($newx1,$newy1) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
+		my ($newx2,$newy2) = _transform_coords($topx,$topy,$att->{x2},$element->{y2},$dstx,$dsty);
+		$element->setAttribute('x1',$newx1);
+		$element->setAttribute('y1',$newy1);
+		$element->setAttribute('x2',$newx2);
+		$element->setAttribute('y2',$newy2);
+		# Polygons
+	    } elsif ($type eq 'polygon') {
+		my @points = split(/\s/,$att->{points});
+		my @transformed;
+		foreach (@points) {
+		    ($x,$y) = split(',',$_);
+		    my ($newx,$newy) = _transform_coords($topx,$topy,$x,$y,$dstx,$dsty);
+		    push (@transformed,"$newx,$newy");
+		}
+		my $transformed = join(" ",@transformed);
+		$element->setAttribute('points',$transformed);
+		# Paths
+	    } elsif ($type eq 'path') {
+		
+	    }
+
+	    # Create new elements for the destination image
+	    # via the generic SVG::Element::tag method
+	    my %attributes = $element->getAttributes;
+	    $self->img->tag($type,%attributes);
+	}
     }
-  }
 }
 
 # Used internally by the copy method
@@ -941,6 +950,33 @@ sub _transform_coords {
   my $newy = $dsty + $yoffset;
   return ($newx,$newy);
 }
+
+sub _copy_image {
+    my $self = shift;
+    my ($source,$dstx,$dsty,$srcx,$srcy,$width,$height) = @_;
+
+    eval "use MIME::Base64; 1"
+	or croak "The MIME::Base64 module is required to copy a GD::Image into a GD::SVG: $@";
+
+    my $subimage = GD::Image->new($width,$height); # will be loaded
+    $subimage->copy($source->isa('GD::Simple') ? $source->gd : $source,
+		    0,0,
+		    $srcx,$srcy,
+		    $width,$height);
+
+    my $data     = encode_base64($subimage->png);
+    my ($img,$id) = $self->_prep($dstx,$dsty);
+    my $result = 
+	$img->image('x'    => $dstx,
+		    'y'    => $dsty,
+		    width  => $width,
+		    height => $height,
+		    id     => $id,
+		    'xlink:href' => "data:image/png;base64,$data");
+    $self->_reset;
+    return $result;
+}
+
 
 
 
@@ -999,6 +1035,15 @@ sub charUp {
 # Replicating the TrueType handling
 #sub GD::Image::stringFT { shift->_error('stringFT'); }
 
+sub stringFT {
+    return;
+}
+
+# not implemented
+sub useFontConfig { 
+    return 0;
+}
+
 
 ##################################################
 # Alpha Channels
@@ -1017,9 +1062,6 @@ sub getBounds {
   my $height = $self->{height};
   return($width,$height);
 }
-
-sub width  { (shift->getBounds)[0] }
-sub height { (shift->getBounds)[1] }
 
 sub isTrueColor { shift->_error('isTrueColor'); }
 sub compare     { shift->_error('compare'); }
@@ -1050,12 +1092,17 @@ sub _build_style {
 
   my $fill_opacity = ($fill) ? '1.0' : 0;
   $fill = defined $fill ? $self->_get_color($fill) : 'none';
-  $stroke_opacity ||= '1.0';
-  my %style = ('stroke'        => $self->_get_color($color),
+  if ((my $color_opacity = $self->_get_opacity($color)) > 0) {
+      $stroke_opacity = (127-$color_opacity)/127;
+  } else {
+      $stroke_opacity ||= '1.0';
+  }
+  my %style = ('stroke'         => $self->_get_color($color),
 	       'stroke-opacity' => $stroke_opacity,
 	       'stroke-width'   => $thickness,
 	       'fill'           => $fill,
-	       'fill-opacity'   => $fill_opacity);
+	       'fill-opacity'   => $stroke_opacity,
+      );
   my $dasharray = $self->{dasharray};
   if ($self->{dasharray}) {
     $style{'stroke-dasharray'} = @{$self->{dasharray}};
@@ -1070,9 +1117,18 @@ sub _get_color {
   confess "somebody gave me a bum index!" unless length $index > 0;
   return ($index) if ($index =~ /rgb/); # Already allocated.
   return ($index) if ($index eq 'none'); # Generate by callbacks using none for fill
-  my ($r,$g,$b) = @{$self->{colors}->{$index}};
+  my ($r,$g,$b,$a) = @{$self->{colors}->{$index}};
   my $color = "rgb($r,$g,$b)";
   return $color;
+}
+
+sub _get_opacity {
+  my ($self,$index) = @_;
+  confess "somebody gave me a bum index!" unless length $index > 0;
+  return ($index) if ($index =~ /rgb/); # Already allocated.
+  return ($index) if ($index eq 'none'); # Generate by callbacks using none for fill
+  my ($r,$g,$b,$a) = @{$self->{colors}->{$index}};
+  return $a;
 }
 
 sub _create_id {
@@ -1945,13 +2001,16 @@ NOT IMPLEMENTED
 
 =head2 Image Copying Methods
 
-None of the image copying commands are implemented in GD::SVG.  If
-your script calls one of the following methods, your script will die
-remorsefully with a warning.  With sufficient demand, I might try to
-implement some of these methods.  For now, I think that they are
-beyond the intent of GD::SVG.
+The basic copy() command is implemented in GD::SVG. You can copy one
+GD::SVG into another GD::SVG, or copy a GD::Image or GD::Simple object
+into a GD::SVG, thereby embedding a pixmap image into the SVG image.
 
-  $image->copy()
+All other image copying methods are unsupported, and if your script
+calls one of the following methods, your script will die remorsefully
+with a warning.  With sufficient demand, I might try to implement some
+of these methods.  For now, I think that they are beyond the intent of
+GD::SVG.
+
   $image->clone()
   $image->copyMerge()
   $image->copyMergeGray()
@@ -2085,6 +2144,15 @@ For backward compatibility with older versions of the FreeType
 library, the alias stringTTF() is also recognized.  Also be aware that
 relative font paths are not recognized due to problems in the libgd
 library.
+
+=item $hasfontconfig = $image-E<gt>useFontConfig($flag)
+
+Call useFontConfig() with a value of 1 in order to enable support for
+fontconfig font patterns (see stringFT).  Regardless of the value of
+$flag, this method will return a true value if the fontconfig library
+is present, or false otherwise.
+
+NOT IMPLEMENTED
 
 =back
 
